@@ -1,0 +1,20 @@
+import { NextResponse } from 'next/server'
+import { getState } from '@/lib/store'
+export const dynamic = 'force-dynamic'
+
+export async function GET() {
+  const s = await getState()
+  return NextResponse.json({
+    roundOpen: s.roundOpen,
+    currentRound: s.currentRound,
+    week: s.week,
+    students: s.students.map(st => ({
+      id: st.id, name: st.name, email: st.email, points: st.points,
+      hasChosen: st.hasChosen,
+      choice: st.hasChosen ? st.choice : undefined,
+      isEliminated: st.isEliminated,
+      staplePartnerId: st.staplePartnerId,
+    })),
+    lastRound: s.rounds.length > 0 ? s.rounds[s.rounds.length - 1] : null,
+  })
+}
