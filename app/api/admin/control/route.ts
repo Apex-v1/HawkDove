@@ -1,101 +1,97 @@
-// app/api/admin/control/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { checkAdmin } from '@/lib/auth'
-import {
-  getGameState,
-  setWeek,
-  startRound,
-  resolveRound,
-  setAdminMessage,
-  setPhase,
-  resetGame,
-  Week,
-} from '@/lib/store'
+import { checkAdmin, getState, loadRoster, setStaple, removeStaple, setStapleTransfer, openRound, closeRound, computeRound, finalizeRound, resetState } from '@/lib/store'
+export const dynamic = 'force-dynamic'
 
-function isAuthed(req: NextRequest): boolean {
-  const cookie = req.cookies.get('admin_auth')?.value
-  return checkAdmin(cookie || '')
+async function auth(req: NextRequest) {
+  return await checkAdmin(req.cookies.get('hd_admin')?.value || '')
+}
+
+export async function GET(req: NextRequest) {
+  if (!await auth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  return NextResponse.json({ state: await getState() })
 }
 
 export async function POST(req: NextRequest) {
-  if (!isAuthed(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
+  if (!await auth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { action, payload } = await req.json()
 
   try {
     switch (action) {
-      case 'open_session': {
-        const state = getGameState()
-        state.sessionStarted = true
-        return NextResponse.json({ ok: true, state: getGameState() })
+      case 'load_roster': {
+        await loadRoster(payload.students)
+        return NextResponse.json({ ok: true, state: await getState() })
       }
-
-      case 'close_session': {
-        const state = getGameState()
-        state.sessionStarted = false
+      case 'set_staple': {
+        await setStaple(payload.aId, payload.bId, payload.hawkId)
+        return NextResponse.json({ ok: true, state: await getState() })
+      }
+      case 'remove_staple': {
+        await removeStaple(payload.id)
+        return NextResponse.json({ ok: true, state: await getState() })
+      }
+      case 'set_staple_transfer': {
+        await setStapleTransfer(payload.hawkId, payload.amount)
         return NextResponse.json({ ok: true })
       }
-
       case 'set_week': {
-        const state = setWeek(payload.week as Week)
-        return NextResponse.json({ ok: true, state })
-      }
-
-      case 'start_round': {
-        const round = startRound()
-        return NextResponse.json({ ok: true, round, state: getGameState() })
-      }
-
-      case 'resolve_round': {
-        const round = resolveRound()
-        return NextResponse.json({ ok: true, round, state: getGameState() })
-      }
-
-      case 'set_message': {
-        setAdminMessage(payload.message)
+        const s = await getState()
+        s.week = payload.week
+        const { Redis } = await import('@upstash/redis').catch(() => ({ Redis: null }))
+        if (Redis && process.env.UPSTASH_REDIS_REST_URL) {
+          const redis = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL!, token: process.env.UPSTASH_REDIS_REST_TOKEN! })
+          await redis.set('hd_game_state_v2', s)
+        }
         return NextResponse.json({ ok: true })
       }
-
-      case 'set_phase': {
-        setPhase(payload.phase)
+      case 'open_round': {
+        await openRound()
+        return NextResponse.json({ ok: true, state: await getState() })
+      }
+      case 'close_round': {
+        await closeRound()
         return NextResponse.json({ ok: true })
       }
-
+      case 'compute_round': {
+        const record = await computeRound()
+        return NextResponse.json({ ok: true, record, state: await getState() })
+      }
+      case 'finalize_round': {
+        const record = await finalizeRound()
+        return NextResponse.json({ ok: true, record, state: await getState() })
+      }
+      case 'update_points': {
+        const s = await getState()
+        if (s.pendingRound) {
+          const p = s.pendingRound.pairings.find(x => x.pairingId === payload.pairingId)
+          if (p) {
+            p.aDelta = payload.aDelta; p.bDelta = payload.bDelta
+            p.note = (p.note || '') + ' [manually adjusted]'
+            const fresh = { ...s.pendingRound.snapshotBefore }
+            s.pendingRound.pairings.forEach(pair => {
+              if (pair.aId === pair.bId) return
+              const a = s.students.find(x => x.id === pair.aId)!
+              const b = s.students.find(x => x.id === pair.bId)!
+              fresh[a.name] = Math.round(((s.pendingRound!.snapshotBefore[a.name] || 0) + pair.aDelta) * 100) / 100
+              fresh[b.name] = Math.round(((s.pendingRound!.snapshotBefore[b.name] || 0) + pair.bDelta) * 100) / 100
+            })
+            s.pendingRound.snapshotAfter = fresh
+            try {
+              const { Redis } = await import('@upstash/redis')
+              const redis = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL!, token: process.env.UPSTASH_REDIS_REST_TOKEN! })
+              await redis.set('hd_game_state_v2', s)
+            } catch {}
+          }
+        }
+        return NextResponse.json({ ok: true, state: await getState() })
+      }
       case 'reset': {
-        const state = resetGame()
-        return NextResponse.json({ ok: true, state })
+        await resetState()
+        return NextResponse.json({ ok: true })
       }
-
-      case 'get_state': {
-        return NextResponse.json({ ok: true, state: getGameState() })
-      }
-
-      case 'hawk_transfer': {
-        // Admin records a manual transfer from hawk to dove in stapled pair
-        const { hawkId, amount } = payload
-        const state = getGameState()
-        const hawk = state.players.find(p => p.id === hawkId)
-        const dove = hawk?.staplePairId ? state.players.find(p => p.id === hawk.staplePairId) : null
-        if (!hawk || !dove) return NextResponse.json({ error: 'Players not found' }, { status: 404 })
-        const xfer = Math.min(amount, hawk.points)
-        hawk.points -= xfer
-        dove.points += xfer
-        return NextResponse.json({ ok: true, state: getGameState() })
-      }
-
       default:
         return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
     }
   } catch (e: unknown) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   }
-}
-
-export async function GET(req: NextRequest) {
-  if (!isAuthed(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-  return NextResponse.json({ state: getGameState() })
 }

@@ -1,331 +1,273 @@
-// lib/store.ts
-// In-memory game state. In production this would be a database (e.g. Vercel KV).
-// For simplicity and zero-cost hosting, we use a server-side singleton.
-
 export type Choice = 'hawk' | 'dove'
 export type Week = 1 | 2
+export type PairType = 'H+H' | 'H+D' | 'D+D' | 'STAPLED'
+export type RoundPhase = 'open' | 'pending_review' | 'finalized'
 
-export interface Player {
-  id: string
-  name: string
-  email: string
-  points: number
-  cardNumber: number // 0-3, the bottom-right number
-  playHistory: ('red' | 'black')[]
-  choice?: Choice
-  hasSubmitted: boolean
+export interface Student {
+  id: string; name: string; email: string; points: number
+  choice?: Choice; hasChosen: boolean
+  staplePartnerId?: string; isHawkInStaple?: boolean; stapleTransferAmount?: number
   isEliminated: boolean
-  // Week 2
-  staplePairId?: string // id of partner if stapled
-  stapleRound?: number  // round they were stapled
-  isHawkInStaple?: boolean
-  wantsReturnToHawk?: boolean // week2: dove deciding if they want to staple
-}
-
-export interface Pairing {
-  id: string
-  playerAId: string
-  playerBId: string
-  choiceA?: Choice
-  choiceB?: Choice
-  resolved: boolean
-  result?: PairingResult
-  isStapled?: boolean
 }
 
 export interface PairingResult {
-  playerAPointsDelta: number
-  playerBPointsDelta: number
-  summary: string
-  diceRoll?: number // for D-D random bonus
-  coinFlip?: 'heads' | 'tails' // for H-H tie
+  pairingId: string; type: PairType
+  aId: string; bId: string; aChoice: Choice; bChoice: Choice
+  aDelta: number; bDelta: number
+  diceRoll?: number; coinFlip?: string; note: string
 }
 
-export interface Round {
-  number: number
-  pairings: Pairing[]
-  resolved: boolean
-  week: Week
+export interface RoundRecord {
+  round: number; week: Week; phase: RoundPhase
+  pairings: PairingResult[]
+  snapshotBefore: Record<string, number>
+  snapshotAfter: Record<string, number>
+  computedAt: string; finalizedAt?: string
 }
 
 export interface GameState {
-  week: Week
-  roundNumber: number
-  phase: 'lobby' | 'submit' | 'reveal' | 'resolved'
-  players: Player[]
-  rounds: Round[]
-  currentPairings: Pairing[]
-  sessionStarted: boolean
-  adminMessage: string
+  week: Week; currentRound: number
+  students: Student[]; rounds: RoundRecord[]
+  roundOpen: boolean; pendingRound?: RoundRecord
+  adminPassword: string
 }
 
-function createInitialState(): GameState {
+const KV_KEY = 'hd_game_state_v2'
+let _mem: GameState | null = null
+
+function makeDefault(): GameState {
   return {
-    week: 1,
-    roundNumber: 0,
-    phase: 'lobby',
-    players: [],
-    rounds: [],
-    currentPairings: [],
-    sessionStarted: false,
-    adminMessage: '',
+    week: 1, currentRound: 0, students: [], rounds: [],
+    roundOpen: false,
+    adminPassword: process.env.ADMIN_PASSWORD || 'hawk2024admin',
   }
 }
 
-// Server-side singleton
-let gameState: GameState = createInitialState()
-
-export function getGameState(): GameState {
-  return gameState
+async function kvGet(): Promise<GameState | null> {
+  try {
+    const { Redis } = await import('@upstash/redis')
+    const redis = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+    })
+    return await redis.get<GameState>(KV_KEY)
+  } catch { return null }
 }
 
-export function resetGame(): GameState {
-  gameState = createInitialState()
-  return gameState
+async function kvSet(state: GameState): Promise<void> {
+  try {
+    const { Redis } = await import('@upstash/redis')
+    const redis = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+    })
+    await redis.set(KV_KEY, state)
+  } catch { /* local dev — in-memory only */ }
 }
 
-export function setWeek(week: Week): GameState {
-  gameState.week = week
-  return gameState
-}
-
-export function addPlayer(name: string, email: string, cardNumber: number): Player {
-  const id = `player_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
-  const player: Player = {
-    id,
-    name,
-    email,
-    points: 100,
-    cardNumber,
-    playHistory: [],
-    hasSubmitted: false,
-    isEliminated: false,
+export async function getState(): Promise<GameState> {
+  if (_mem) return _mem
+  const persisted = await kvGet()
+  if (persisted) {
+    persisted.adminPassword = process.env.ADMIN_PASSWORD || 'hawk2024admin'
+    _mem = persisted
+    return _mem
   }
-  gameState.players.push(player)
-  return player
+  _mem = makeDefault()
+  return _mem
 }
 
-export function submitChoice(playerId: string, choice: Choice): boolean {
-  const player = gameState.players.find(p => p.id === playerId)
-  if (!player || player.hasSubmitted) return false
-  player.choice = choice
-  player.hasSubmitted = true
+async function save(): Promise<void> {
+  if (_mem) await kvSet(_mem)
+}
+
+export async function resetState(): Promise<void> {
+  _mem = makeDefault()
+  await save()
+}
+
+export async function loadRoster(rows: { name: string; email: string; points: number }[]): Promise<void> {
+  const s = await getState()
+  s.students = rows.map((r, i) => ({
+    id: `s${i}_${r.name.replace(/\W+/g, '').toLowerCase().slice(0, 8)}`,
+    name: r.name, email: r.email, points: r.points,
+    hasChosen: false, isEliminated: false,
+  }))
+  await save()
+}
+
+export async function setStaple(aId: string, bId: string, hawkId: string): Promise<void> {
+  const s = await getState()
+  const a = s.students.find(x => x.id === aId)
+  const b = s.students.find(x => x.id === bId)
+  if (!a || !b) return
+  a.staplePartnerId = bId; a.isHawkInStaple = a.id === hawkId
+  b.staplePartnerId = aId; b.isHawkInStaple = b.id === hawkId
+  await save()
+}
+
+export async function removeStaple(id: string): Promise<void> {
+  const s = await getState()
+  const st = s.students.find(x => x.id === id)
+  if (!st?.staplePartnerId) return
+  const partner = s.students.find(x => x.id === st.staplePartnerId)
+  if (partner) { partner.staplePartnerId = undefined; partner.isHawkInStaple = undefined }
+  st.staplePartnerId = undefined; st.isHawkInStaple = undefined
+  await save()
+}
+
+export async function setStapleTransfer(hawkId: string, amount: number): Promise<void> {
+  const s = await getState()
+  const h = s.students.find(x => x.id === hawkId)
+  if (h) { h.stapleTransferAmount = amount; await save() }
+}
+
+export async function openRound(): Promise<void> {
+  const s = await getState()
+  s.roundOpen = true
+  s.students.forEach(st => { st.hasChosen = false; st.choice = undefined })
+  await save()
+}
+
+export async function closeRound(): Promise<void> {
+  const s = await getState()
+  s.roundOpen = false
+  await save()
+}
+
+export async function submitChoice(studentId: string, choice: Choice): Promise<boolean> {
+  const s = await getState()
+  if (!s.roundOpen) return false
+  const st = s.students.find(x => x.id === studentId)
+  if (!st || st.isEliminated) return false
+  st.choice = choice
+  st.hasChosen = true
+  await save()
   return true
 }
 
-export function startRound(): Round {
-  // Reset submissions
-  gameState.players.forEach(p => {
-    if (!p.isEliminated) {
-      p.hasSubmitted = false
-      p.choice = undefined
-    }
-  })
+export async function computeRound(): Promise<RoundRecord> {
+  const s = await getState()
+  const snapshotBefore: Record<string, number> = {}
+  s.students.forEach(st => { snapshotBefore[st.name] = st.points })
 
-  gameState.phase = 'submit'
-  gameState.roundNumber++
+  const active = s.students.filter(st => !st.isEliminated)
+  const pairings: PairingResult[] = []
+  const paired = new Set<string>()
 
-  // Generate pairings
-  const activePlayers = gameState.players.filter(p => !p.isEliminated)
-
-  let pairings: Pairing[] = []
-
-  if (gameState.week === 2) {
-    // Week 2: stapled pairs are locked
-    const stapledIds = new Set<string>()
-    const stapledPairs: Pairing[] = []
-
-    activePlayers.forEach(p => {
-      if (p.staplePairId && !stapledIds.has(p.id)) {
-        const partner = gameState.players.find(pl => pl.id === p.staplePairId)
-        if (partner) {
-          stapledIds.add(p.id)
-          stapledIds.add(partner.id)
-          stapledPairs.push({
-            id: `pairing_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-            playerAId: p.isHawkInStaple ? p.id : partner.id,
-            playerBId: p.isHawkInStaple ? partner.id : p.id,
-            resolved: false,
-            isStapled: true,
-          })
-        }
+  if (s.week === 2) {
+    active.forEach(st => {
+      if (st.staplePartnerId && st.isHawkInStaple && !paired.has(st.id)) {
+        const dove = s.students.find(x => x.id === st.staplePartnerId)
+        if (!dove) return
+        paired.add(st.id); paired.add(dove.id)
+        const taken = Math.round(dove.points * 0.25 * 100) / 100
+        const gain = Math.round(taken * 3 * 100) / 100
+        const xfer = st.stapleTransferAmount ?? 0
+        pairings.push({
+          pairingId: `r${s.currentRound + 1}_staple_${st.id}`,
+          type: 'STAPLED', aId: st.id, bId: dove.id,
+          aChoice: 'hawk', bChoice: 'dove',
+          aDelta: Math.round((gain - xfer) * 100) / 100,
+          bDelta: Math.round((-taken + xfer) * 100) / 100,
+          note: `${st.name} (Hawk) takes 25% of ${dove.name}'s ${dove.points}pts ×3 = +${gain}. Returns ${xfer}pts.`,
+        })
       }
     })
-
-    // Shuffle remaining
-    const unstapled = activePlayers.filter(p => !stapledIds.has(p.id))
-    const shuffled = [...unstapled].sort(() => Math.random() - 0.5)
-    for (let i = 0; i < shuffled.length - 1; i += 2) {
-      pairings.push({
-        id: `pairing_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 7)}`,
-        playerAId: shuffled[i].id,
-        playerBId: shuffled[i + 1].id,
-        resolved: false,
-      })
-    }
-    pairings = [...stapledPairs, ...pairings]
-  } else {
-    const shuffled = [...activePlayers].sort(() => Math.random() - 0.5)
-    for (let i = 0; i < shuffled.length - 1; i += 2) {
-      pairings.push({
-        id: `pairing_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 7)}`,
-        playerAId: shuffled[i].id,
-        playerBId: shuffled[i + 1].id,
-        resolved: false,
-      })
-    }
   }
 
-  const round: Round = {
-    number: gameState.roundNumber,
-    pairings,
-    resolved: false,
-    week: gameState.week,
-  }
+  const free = active.filter(st => !paired.has(st.id))
+  const shuffled = [...free].sort(() => Math.random() - 0.5)
 
-  gameState.currentPairings = pairings
-  gameState.rounds.push(round)
-  return round
-}
+  for (let i = 0; i < shuffled.length - 1; i += 2) {
+    const a = shuffled[i], b = shuffled[i + 1]
+    paired.add(a.id); paired.add(b.id)
+    const ca: Choice = a.choice || 'dove'
+    const cb: Choice = b.choice || 'dove'
+    let aDelta = 0, bDelta = 0, note = ''
+    let type: PairType, diceRoll: number | undefined, coinFlip: string | undefined
 
-export function resolveRound(): Round {
-  const round = gameState.rounds[gameState.rounds.length - 1]
-  if (!round) throw new Error('No active round')
-
-  round.pairings.forEach(pairing => {
-    const playerA = gameState.players.find(p => p.id === pairing.playerAId)!
-    const playerB = gameState.players.find(p => p.id === pairing.playerBId)!
-
-    let choiceA: Choice
-    let choiceB: Choice
-
-    if (pairing.isStapled) {
-      // In a stapled pair, A is always hawk, B is always dove
-      choiceA = 'hawk'
-      choiceB = 'dove'
-    } else {
-      choiceA = playerA.choice || 'dove'
-      choiceB = playerB.choice || 'dove'
-    }
-
-    pairing.choiceA = choiceA
-    pairing.choiceB = choiceB
-
-    let deltaA = 0
-    let deltaB = 0
-    let summary = ''
-    let diceRoll: number | undefined
-    let coinFlip: 'heads' | 'tails' | undefined
-
-    if (choiceA === 'dove' && choiceB === 'dove') {
-      diceRoll = Math.floor(Math.random() * 20) + 1
-      deltaA = diceRoll
-      deltaB = diceRoll
-      summary = `Both played DOVE. Each gains +${diceRoll} points (dice roll).`
-    } else if (choiceA === 'hawk' && choiceB === 'dove') {
-      const taken = Math.floor(playerB.points * 0.25)
-      deltaB = -taken
-      deltaA = taken * 3
-      summary = `${playerA.name} (HAWK) takes 25% of ${playerB.name}'s points × 3. ${playerA.name} gains +${deltaA}, ${playerB.name} loses -${taken}.`
-    } else if (choiceA === 'dove' && choiceB === 'hawk') {
-      const taken = Math.floor(playerA.points * 0.25)
-      deltaA = -taken
-      deltaB = taken * 3
-      summary = `${playerB.name} (HAWK) takes 25% of ${playerA.name}'s points × 3. ${playerB.name} gains +${deltaB}, ${playerA.name} loses -${taken}.`
-    } else {
-      // H-H: higher card number wins all
-      if (playerA.cardNumber > playerB.cardNumber) {
-        deltaA = playerB.points
-        deltaB = -playerB.points
-        summary = `Both played HAWK. ${playerA.name} has higher card (${playerA.cardNumber} vs ${playerB.cardNumber}) and takes all ${playerB.points} of ${playerB.name}'s points.`
-      } else if (playerB.cardNumber > playerA.cardNumber) {
-        deltaB = playerA.points
-        deltaA = -playerA.points
-        summary = `Both played HAWK. ${playerB.name} has higher card (${playerB.cardNumber} vs ${playerA.cardNumber}) and takes all ${playerA.points} of ${playerA.name}'s points.`
-      } else {
-        // Coin flip
+    if (ca === 'hawk' && cb === 'hawk') {
+      type = 'H+H'
+      if (a.points > b.points) { aDelta = b.points; bDelta = -b.points; note = `${a.name} (${a.points}) > ${b.name} (${b.points}) — takes all` }
+      else if (b.points > a.points) { bDelta = a.points; aDelta = -a.points; note = `${b.name} (${b.points}) > ${a.name} (${a.points}) — takes all` }
+      else {
         coinFlip = Math.random() > 0.5 ? 'heads' : 'tails'
-        if (coinFlip === 'heads') {
-          deltaA = playerB.points
-          deltaB = -playerB.points
-          summary = `Both played HAWK, cards tied (${playerA.cardNumber}). Coin flip → HEADS: ${playerA.name} takes all ${playerB.points} of ${playerB.name}'s points.`
-        } else {
-          deltaB = playerA.points
-          deltaA = -playerA.points
-          summary = `Both played HAWK, cards tied (${playerA.cardNumber}). Coin flip → TAILS: ${playerB.name} takes all ${playerA.points} of ${playerA.name}'s points.`
-        }
+        if (coinFlip === 'heads') { aDelta = b.points; bDelta = -b.points; note = `Tied — coin flip heads → ${a.name} wins` }
+        else { bDelta = a.points; aDelta = -a.points; note = `Tied — coin flip tails → ${b.name} wins` }
       }
+    } else if (ca === 'dove' && cb === 'dove') {
+      type = 'D+D'; diceRoll = Math.floor(Math.random() * 20) + 1
+      aDelta = diceRoll; bDelta = diceRoll
+      note = `Both Dove — dice roll: ${diceRoll}, each gains +${diceRoll}pts`
+    } else {
+      type = 'H+D'
+      const [hawk, dove, hIsA] = ca === 'hawk' ? [a, b, true] : [b, a, false]
+      const taken = Math.round(dove.points * 0.25 * 100) / 100
+      const gain = Math.round(taken * 3 * 100) / 100
+      if (hIsA) { aDelta = gain; bDelta = -taken } else { bDelta = gain; aDelta = -taken }
+      note = `${hawk.name} (Hawk) takes 25% of ${dove.name}'s ${dove.points}pts ×3 = +${gain}`
     }
 
-    pairing.result = { playerAPointsDelta: deltaA, playerBPointsDelta: deltaB, summary, diceRoll, coinFlip }
-
-    // Apply deltas
-    playerA.points = Math.max(0, playerA.points + deltaA)
-    playerB.points = Math.max(0, playerB.points + deltaB)
-
-    // Update play history
-    if (!pairing.isStapled) {
-      // We'll track as red = hawk, black = dove conceptually
-      playerA.playHistory.push(choiceA === 'hawk' ? 'red' : 'black')
-      playerB.playHistory.push(choiceB === 'hawk' ? 'red' : 'black')
-    }
-
-    // Eliminate players at 0
-    if (playerA.points <= 0) playerA.isEliminated = true
-    if (playerB.points <= 0) playerB.isEliminated = true
-
-    pairing.resolved = true
-  })
-
-  round.resolved = true
-  gameState.phase = 'reveal'
-
-  // Week 2: Check end conditions
-  if (gameState.week === 2) {
-    const active = gameState.players.filter(p => !p.isEliminated)
-    const unstapled = active.filter(p => !p.staplePairId)
-    if (unstapled.length <= 1) {
-      gameState.phase = 'resolved'
-    }
+    pairings.push({
+      pairingId: `r${s.currentRound + 1}_${a.id}_${b.id}`,
+      type, aId: a.id, bId: b.id, aChoice: ca, bChoice: cb,
+      aDelta: Math.round(aDelta * 100) / 100,
+      bDelta: Math.round(bDelta * 100) / 100,
+      diceRoll, coinFlip, note,
+    })
   }
 
-  return round
-}
+  if (shuffled.length % 2 === 1) {
+    const out = shuffled[shuffled.length - 1]
+    pairings.push({
+      pairingId: `r${s.currentRound + 1}_sitsout_${out.id}`,
+      type: 'D+D', aId: out.id, bId: out.id,
+      aChoice: out.choice || 'dove', bChoice: out.choice || 'dove',
+      aDelta: 0, bDelta: 0,
+      note: `${out.name} sits out (odd number) — no change`,
+    })
+  }
 
-export function offerStaple(dovePlayerId: string, acceptStaple: boolean): void {
-  if (!acceptStaple) return
-
-  // Find the pairing from last round where this player was the dove
-  const lastRound = gameState.rounds[gameState.rounds.length - 1]
-  if (!lastRound) return
-
-  const pairing = lastRound.pairings.find(p => {
-    if (p.resolved && !p.isStapled) {
-      const wasHD = p.choiceA === 'hawk' && p.choiceB === 'dove' && p.playerBId === dovePlayerId
-      const wasDH = p.choiceA === 'dove' && p.choiceB === 'hawk' && p.playerAId === dovePlayerId
-      return wasHD || wasDH
-    }
-    return false
+  const snapshotAfter: Record<string, number> = { ...snapshotBefore }
+  pairings.forEach(p => {
+    if (p.aId === p.bId) return
+    const a = s.students.find(x => x.id === p.aId)!
+    const b = s.students.find(x => x.id === p.bId)!
+    snapshotAfter[a.name] = Math.round((snapshotBefore[a.name] + p.aDelta) * 100) / 100
+    snapshotAfter[b.name] = Math.round((snapshotBefore[b.name] + p.bDelta) * 100) / 100
   })
 
-  if (!pairing) return
-
-  const dove = gameState.players.find(p => p.id === dovePlayerId)!
-  const hawkId = pairing.choiceA === 'hawk' ? pairing.playerAId : pairing.playerBId
-  const hawk = gameState.players.find(p => p.id === hawkId)!
-
-  dove.staplePairId = hawk.id
-  hawk.staplePairId = dove.id
-  dove.isHawkInStaple = false
-  hawk.isHawkInStaple = true
-  dove.stapleRound = gameState.roundNumber
-  hawk.stapleRound = gameState.roundNumber
+  const record: RoundRecord = {
+    round: s.currentRound + 1, week: s.week, phase: 'pending_review',
+    pairings, snapshotBefore, snapshotAfter,
+    computedAt: new Date().toISOString(),
+  }
+  s.pendingRound = record
+  await save()
+  return record
 }
 
-export function setAdminMessage(msg: string): void {
-  gameState.adminMessage = msg
+export async function finalizeRound(): Promise<RoundRecord> {
+  const s = await getState()
+  const r = s.pendingRound
+  if (!r) throw new Error('No pending round')
+  r.pairings.forEach(p => {
+    if (p.aId === p.bId) return
+    const a = s.students.find(x => x.id === p.aId)!
+    const b = s.students.find(x => x.id === p.bId)!
+    a.points = Math.max(0, Math.round((a.points + p.aDelta) * 100) / 100)
+    b.points = Math.max(0, Math.round((b.points + p.bDelta) * 100) / 100)
+    if (a.points <= 0) a.isEliminated = true
+    if (b.points <= 0) b.isEliminated = true
+  })
+  r.phase = 'finalized'; r.finalizedAt = new Date().toISOString()
+  s.rounds.push(r); s.currentRound++; s.pendingRound = undefined; s.roundOpen = false
+  await save()
+  return r
 }
 
-export function setPhase(phase: GameState['phase']): void {
-  gameState.phase = phase
+export async function checkAdmin(pw: string): Promise<boolean> {
+  const s = await getState()
+  return pw === s.adminPassword
 }

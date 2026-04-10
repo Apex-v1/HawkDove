@@ -1,438 +1,591 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 
-interface Player {
-  id: string
-  name: string
-  email: string
-  points: number
-  cardNumber: number
-  playHistory: ('red' | 'black')[]
-  choice?: string
-  hasSubmitted: boolean
-  isEliminated: boolean
-  staplePairId?: string
-  isHawkInStaple?: boolean
-  stapleRound?: number
-}
+type Tab = 'roster' | 'round' | 'history' | 'insights'
 
-interface Pairing {
-  id: string
-  playerAId: string
-  playerBId: string
-  choiceA?: string
-  choiceB?: string
-  resolved: boolean
-  isStapled?: boolean
-  result?: { playerAPointsDelta: number; playerBPointsDelta: number; summary: string; diceRoll?: number; coinFlip?: string }
-}
-
-interface GameState {
-  week: 1 | 2
-  roundNumber: number
-  phase: string
-  sessionStarted: boolean
-  players: Player[]
-  currentPairings: Pairing[]
-  adminMessage: string
-}
+interface Student { id: string; name: string; email: string; points: number; hasChosen: boolean; choice?: string; isEliminated: boolean; staplePartnerId?: string; isHawkInStaple?: boolean; stapleTransferAmount?: number }
+interface Pairing { pairingId: string; type: string; aId: string; bId: string; aChoice: string; bChoice: string; aDelta: number; bDelta: number; note: string; diceRoll?: number; coinFlip?: string }
+interface RoundRecord { round: number; week: number; phase: string; pairings: Pairing[]; snapshotBefore: Record<string,number>; snapshotAfter: Record<string,number>; computedAt: string; finalizedAt?: string }
+interface GameState { week: number; currentRound: number; students: Student[]; rounds: RoundRecord[]; roundOpen: boolean; pendingRound?: RoundRecord }
 
 export default function AdminPage() {
   const [authed, setAuthed] = useState(false)
-  const [password, setPassword] = useState('')
-  const [authError, setAuthError] = useState('')
+  const [pw, setPw] = useState('')
+  const [pwErr, setPwErr] = useState('')
   const [state, setState] = useState<GameState | null>(null)
-  const [msg, setMsg] = useState('')
-  const [transferAmounts, setTransferAmounts] = useState<Record<string, string>>({})
+  const [tab, setTab] = useState<Tab>('roster')
   const [loading, setLoading] = useState('')
+  const [csvText, setCsvText] = useState('')
+  const [csvError, setCsvError] = useState('')
+  const [stapleA, setStapleA] = useState('')
+  const [stapleB, setStapleB] = useState('')
+  const [stapleHawk, setStapleHawk] = useState('')
+  const [editDeltas, setEditDeltas] = useState<Record<string, {a:string,b:string}>>({})
 
   const fetchState = useCallback(async () => {
-    try {
-      const res = await fetch('/api/admin/control', { cache: 'no-store' })
-      if (res.status === 401) { setAuthed(false); return }
-      const data = await res.json()
-      setState(data.state)
-    } catch { /* ignore */ }
+    const res = await fetch('/api/admin/control', { cache: 'no-store' })
+    if (res.status === 401) { setAuthed(false); return }
+    const data = await res.json()
+    setState(data.state)
   }, [])
 
   useEffect(() => {
     if (!authed) return
     fetchState()
-    const interval = setInterval(fetchState, 2000)
-    return () => clearInterval(interval)
+    const iv = setInterval(fetchState, 3000)
+    return () => clearInterval(iv)
   }, [authed, fetchState])
 
   async function login() {
-    const res = await fetch('/api/admin/auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
-    })
-    if (res.ok) { setAuthed(true); setAuthError('') }
-    else setAuthError('Invalid password')
+    const res = await fetch('/api/admin/auth', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ password: pw }) })
+    if (res.ok) { setAuthed(true); setPwErr('') }
+    else setPwErr('Wrong password')
   }
 
-  async function action(act: string, payload: Record<string, unknown> = {}) {
-    setLoading(act)
-    try {
-      const res = await fetch('/api/admin/control', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: act, payload }),
-      })
-      const data = await res.json()
-      if (data.state) setState(data.state)
-    } finally {
-      setLoading('')
+  async function act(action: string, payload: Record<string,unknown> = {}) {
+    setLoading(action)
+    const res = await fetch('/api/admin/control', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ action, payload }) })
+    const data = await res.json()
+    if (data.state) setState(data.state)
+    setLoading('')
+    return data
+  }
+
+  function parseCSV(text: string): { name: string; email: string; points: number }[] | null {
+    const lines = text.trim().split('\n').filter(l => l.trim())
+    if (lines.length < 2) { setCsvError('Need header row + data rows'); return null }
+    const header = lines[0].split(',').map(h => h.trim().toLowerCase())
+    const ni = header.findIndex(h => h.includes('name'))
+    const ei = header.findIndex(h => h.includes('email'))
+    const pi = header.findIndex(h => h.includes('point') || h.includes('pts'))
+    if (ni === -1 || pi === -1) { setCsvError('Need columns: name, email (optional), points/pts'); return null }
+    const rows = []
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(',').map(c => c.trim())
+      const name = cols[ni]?.trim()
+      if (!name) continue
+      const email = ei >= 0 ? (cols[ei]?.trim() || '') : ''
+      const pts = parseFloat(cols[pi] || '0') || 0
+      rows.push({ name, email, points: pts })
     }
+    if (rows.length === 0) { setCsvError('No valid rows found'); return null }
+    return rows
   }
 
-  async function sendMessage() {
-    await action('set_message', { message: msg })
-    setMsg('')
+  async function uploadRoster() {
+    setCsvError('')
+    const rows = parseCSV(csvText)
+    if (!rows) return
+    await act('load_roster', { students: rows })
+    setCsvText('')
   }
 
-  async function doTransfer(hawkId: string) {
-    const amt = Number(transferAmounts[hawkId] || 0)
-    if (!amt) return
-    await action('hawk_transfer', { hawkId, amount: amt })
-    setTransferAmounts(prev => ({ ...prev, [hawkId]: '' }))
+  async function addStaple() {
+    if (!stapleA || !stapleB || !stapleHawk) return
+    await act('set_staple', { aId: stapleA, bId: stapleB, hawkId: stapleHawk })
+    setStapleA(''); setStapleB(''); setStapleHawk('')
+  }
+
+  async function updateDelta(pairingId: string) {
+    const ed = editDeltas[pairingId]
+    if (!ed) return
+    await act('update_points', { pairingId, aDelta: parseFloat(ed.a), bDelta: parseFloat(ed.b) })
+    setEditDeltas(prev => { const n = {...prev}; delete n[pairingId]; return n })
   }
 
   // ── LOGIN ─────────────────────────────────────────────────────────────────
-  if (!authed) {
-    return (
-      <main className="min-h-screen flex items-center justify-center px-4">
-        <div className="w-full max-w-xs">
-          <div className="font-mono text-xs mb-6 text-center" style={{ color: 'var(--text-dim)', letterSpacing: '0.3em' }}>
-            ADMIN ACCESS
-          </div>
-          <div className="font-mono text-2xl font-bold text-center mb-8">
+  if (!authed) return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ width: '100%', maxWidth: 320 }}>
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <div style={{ fontSize: 24, fontWeight: 500 }}>
             <span style={{ color: 'var(--hawk)' }}>HAWK</span>
-            <span style={{ color: 'var(--text-dim)' }}>/</span>
+            <span style={{ color: 'var(--text-dim)', margin: '0 8px' }}>/</span>
             <span style={{ color: 'var(--dove)' }}>DOVE</span>
           </div>
-          <div className="flex flex-col gap-3">
-            <input
-              type="password"
-              className="input-field"
-              placeholder="Admin password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && login()}
-            />
-            {authError && <p className="font-mono text-xs" style={{ color: 'var(--hawk)' }}>{authError}</p>}
-            <button className="btn-dove w-full py-3" onClick={login}>AUTHENTICATE →</button>
-          </div>
+          <div className="label" style={{ marginTop: 6 }}>Admin Panel</div>
         </div>
-      </main>
-    )
-  }
+        <div className="card" style={{ padding: 20 }}>
+          <input type="password" className="input" placeholder="Password" value={pw}
+            onChange={e => setPw(e.target.value)} onKeyDown={e => e.key==='Enter' && login()} autoFocus />
+          {pwErr && <div style={{ color: 'var(--hawk)', fontSize: 12, marginTop: 8 }}>{pwErr}</div>}
+          <button className="btn btn-gold" style={{ width: '100%', marginTop: 12, padding: 12 }} onClick={login}>Enter →</button>
+        </div>
+      </div>
+    </div>
+  )
 
-  if (!state) {
-    return (
-      <main className="min-h-screen flex items-center justify-center">
-        <div className="font-mono text-sm blink" style={{ color: 'var(--text-dim)' }}>Loading state...</div>
-      </main>
-    )
-  }
+  if (!state) return <div style={{ padding: 32, color: 'var(--text-dim)' }}>Loading...</div>
 
-  const activePlayers = state.players.filter(p => !p.isEliminated)
-  const submitted = state.players.filter(p => p.hasSubmitted && !p.isEliminated).length
-  const stapledPlayers = activePlayers.filter(p => p.staplePairId && p.isHawkInStaple)
-  const topPlayers = [...state.players].sort((a, b) => b.points - a.points).slice(0, 5)
+  const active = state.students.filter(s => !s.isEliminated)
+  const submitted = active.filter(s => s.hasChosen).length
+  const stapledPairs = state.students.filter(s => s.staplePartnerId && s.isHawkInStaple)
 
+  // ── MAIN UI ───────────────────────────────────────────────────────────────
   return (
-    <main className="min-h-screen p-4 md:p-6" style={{ maxWidth: 1200, margin: '0 auto' }}>
+    <div style={{ minHeight: '100vh', padding: 20, maxWidth: 1400, margin: '0 auto' }}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6 pb-4" style={{ borderBottom: '1px solid var(--border)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid var(--border)' }}>
         <div>
-          <div className="font-mono text-xs mb-1" style={{ color: 'var(--text-dim)', letterSpacing: '0.3em' }}>ADMIN PANEL</div>
-          <div className="font-mono text-xl font-bold">
+          <div style={{ fontSize: 18, fontWeight: 500 }}>
             <span style={{ color: 'var(--hawk)' }}>HAWK</span>
-            <span style={{ color: 'var(--text-dim)' }}>/</span>
+            <span style={{ color: 'var(--text-dim)', margin: '0 6px' }}>/</span>
             <span style={{ color: 'var(--dove)' }}>DOVE</span>
+            <span style={{ color: 'var(--text-dim)', fontSize: 13, marginLeft: 12 }}>Admin</span>
           </div>
         </div>
-        <div className="flex gap-2 items-center">
-          <StatusBadge phase={state.phase} />
-          <button className="btn-danger" onClick={() => { if (confirm('Reset entire game?')) action('reset') }}>RESET</button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <StatPill label="Week" value={state.week} />
+          <StatPill label="Round" value={state.currentRound} />
+          <StatPill label="Players" value={active.length} />
+          <StatPill label="Submitted" value={`${submitted}/${active.length}`} color={submitted === active.length && active.length > 0 ? 'var(--green)' : 'var(--gold)'} />
+          {state.roundOpen && <span className="tag tag-dove pulse">● OPEN</span>}
+          {state.pendingRound && <span className="tag tag-gold">⏳ PENDING REVIEW</span>}
+          <button className="btn btn-danger" style={{ fontSize: 10, padding: '5px 10px' }} onClick={() => { if (confirm('Reset everything?')) act('reset') }}>Reset</button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* ── LEFT COLUMN: Controls ── */}
-        <div className="flex flex-col gap-4">
-          {/* Status */}
-          <div className="card p-4">
-            <div className="font-mono text-xs mb-3" style={{ color: 'var(--text-dim)', letterSpacing: '0.2em' }}>STATUS</div>
-            <div className="grid grid-cols-3 gap-2 font-mono text-center">
-              <Stat label="WEEK" value={state.week} />
-              <Stat label="ROUND" value={state.roundNumber || '—'} />
-              <Stat label="PLAYERS" value={activePlayers.length} />
+      {/* Round controls bar */}
+      <div className="card" style={{ padding: 14, marginBottom: 16, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="label" style={{ marginRight: 4 }}>Week:</div>
+        {[1,2].map(w => (
+          <button key={w} className={`btn ${state.week === w ? 'btn-gold' : 'btn-ghost'}`} style={{ padding: '6px 14px', fontSize: 11 }}
+            onClick={() => act('set_week', { week: w })}>Week {w}</button>
+        ))}
+        <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 4px' }} />
+        {!state.roundOpen && !state.pendingRound && (
+          <button className="btn btn-dove" style={{ padding: '8px 16px' }} onClick={() => act('open_round')} disabled={!!loading}>
+            ▶ Open Round {state.currentRound + 1}
+          </button>
+        )}
+        {state.roundOpen && (
+          <>
+            <button className="btn btn-ghost" style={{ padding: '8px 16px' }} onClick={() => act('close_round')}>Close submissions</button>
+            <button className="btn btn-gold" style={{ padding: '8px 16px' }}
+              onClick={async () => { await act('compute_round'); setTab('round') }}
+              disabled={!!loading}>
+              {loading === 'compute_round' ? 'Computing...' : '⚡ Compute Round'}
+            </button>
+          </>
+        )}
+        {state.pendingRound && (
+          <button className="btn btn-hawk" style={{ padding: '8px 16px' }}
+            onClick={async () => { await act('finalize_round'); setTab('history') }}
+            disabled={!!loading}>
+            {loading === 'finalize_round' ? 'Finalizing...' : '✓ Finalize & Push Results'}
+          </button>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '1px solid var(--border)' }}>
+        {(['roster','round','history','insights'] as Tab[]).map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            style={{
+              padding: '9px 18px', fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase',
+              background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+              color: tab === t ? 'var(--text)' : 'var(--text-dim)',
+              borderBottom: tab === t ? '2px solid var(--dove)' : '2px solid transparent',
+              transition: 'all 0.12s',
+            }}>
+            {t === 'round' && state.pendingRound ? '⏳ Review' : t.charAt(0).toUpperCase() + t.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      {/* ── ROSTER TAB ───────────────────────────────────────────────────── */}
+      {tab === 'roster' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          {/* CSV Upload */}
+          <div className="card" style={{ padding: 16 }}>
+            <div className="label" style={{ marginBottom: 12 }}>Upload Roster (CSV)</div>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 10, lineHeight: 1.6 }}>
+              Paste CSV with columns: <code style={{ color: 'var(--dove)' }}>name, email, points</code><br/>
+              Header row required. Email optional.
             </div>
+            <textarea className="input" rows={8} placeholder={"name,email,points\nSmith, John,john@uni.edu,100\nDoe, Jane,jane@uni.edu,85"}
+              value={csvText} onChange={e => setCsvText(e.target.value)}
+              style={{ resize: 'vertical', fontFamily: 'inherit', fontSize: 11 }} />
+            {csvError && <div style={{ color: 'var(--hawk)', fontSize: 11, marginTop: 6 }}>{csvError}</div>}
+            <button className="btn btn-gold" style={{ marginTop: 10, width: '100%', padding: 10 }} onClick={uploadRoster}>
+              Upload & Replace Roster
+            </button>
           </div>
 
-          {/* Week toggle */}
-          <div className="card p-4">
-            <div className="font-mono text-xs mb-3" style={{ color: 'var(--text-dim)', letterSpacing: '0.2em' }}>GAME MODE</div>
-            <div className="grid grid-cols-2 gap-2">
-              {([1, 2] as const).map(w => (
-                <button
-                  key={w}
-                  className="py-2 font-mono text-sm font-bold transition-all"
-                  onClick={() => action('set_week', { week: w })}
-                  style={{
-                    border: `1px solid ${state.week === w ? 'var(--gold)' : 'var(--border-bright)'}`,
-                    background: state.week === w ? 'var(--gold-dim)' : 'var(--bg)',
-                    color: state.week === w ? 'var(--gold)' : 'var(--text-secondary)',
-                  }}
-                >
-                  WEEK {w}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Session control */}
-          <div className="card p-4">
-            <div className="font-mono text-xs mb-3" style={{ color: 'var(--text-dim)', letterSpacing: '0.2em' }}>SESSION</div>
-            <div className="flex flex-col gap-2">
-              <button
-                className={state.sessionStarted ? 'btn-danger' : 'btn-dove'}
-                style={{ padding: '10px 0', fontSize: 12 }}
-                onClick={() => action(state.sessionStarted ? 'close_session' : 'open_session')}
-              >
-                {state.sessionStarted ? '⬛ CLOSE SESSION' : '▶ OPEN SESSION'}
-              </button>
-              {state.sessionStarted && (
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full blink" style={{ background: '#4caf50' }} />
-                  <span className="font-mono text-xs" style={{ color: '#4caf50' }}>Open — students can join</span>
+          {/* Staple manager */}
+          <div className="card" style={{ padding: 16 }}>
+            <div className="label" style={{ marginBottom: 12 }}>Stapled Pairs (Week 2)</div>
+            {state.students.length === 0 ? (
+              <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>Upload roster first.</div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                  <select className="input" value={stapleA} onChange={e => setStapleA(e.target.value)}>
+                    <option value="">Player A...</option>
+                    {state.students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                  <select className="input" value={stapleB} onChange={e => setStapleB(e.target.value)}>
+                    <option value="">Player B...</option>
+                    {state.students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                  <select className="input" value={stapleHawk} onChange={e => setStapleHawk(e.target.value)}>
+                    <option value="">Who is the Hawk?</option>
+                    {[stapleA, stapleB].filter(Boolean).map(id => {
+                      const s = state.students.find(x => x.id === id)
+                      return s ? <option key={s.id} value={s.id}>{s.name}</option> : null
+                    })}
+                  </select>
+                  <button className="btn btn-gold" style={{ padding: 9 }} onClick={addStaple} disabled={!stapleA || !stapleB || !stapleHawk}>
+                    📌 Staple Pair
+                  </button>
                 </div>
-              )}
-            </div>
-          </div>
 
-          {/* Round controls */}
-          <div className="card p-4">
-            <div className="font-mono text-xs mb-3" style={{ color: 'var(--text-dim)', letterSpacing: '0.2em' }}>ROUND CONTROLS</div>
-            <div className="flex flex-col gap-2">
-              <button
-                className="btn-dove"
-                style={{ padding: '10px 0', fontSize: 12 }}
-                onClick={() => action('start_round')}
-                disabled={state.phase === 'submit' || !state.sessionStarted}
-              >
-                {loading === 'start_round' ? '...' : '▶ START ROUND'}
-              </button>
-              <button
-                className="btn-hawk"
-                style={{ padding: '10px 0', fontSize: 12 }}
-                onClick={() => action('resolve_round')}
-                disabled={state.phase !== 'submit'}
-              >
-                {loading === 'resolve_round' ? '...' : '⚡ RESOLVE + REVEAL'}
-              </button>
-            </div>
-
-            {state.phase === 'submit' && (
-              <div className="mt-3">
-                <div className="font-mono text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>
-                  Submitted: {submitted} / {activePlayers.length}
-                </div>
-                <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
-                  <div className="h-full transition-all" style={{
-                    background: 'var(--dove)',
-                    width: `${activePlayers.length > 0 ? (submitted / activePlayers.length) * 100 : 0}%`
-                  }} />
-                </div>
-              </div>
+                {stapledPairs.length === 0
+                  ? <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>No stapled pairs yet.</div>
+                  : stapledPairs.map(hawk => {
+                    const dove = state.students.find(s => s.id === hawk.staplePartnerId)
+                    if (!dove) return null
+                    return (
+                      <div key={hawk.id} className="card-raised" style={{ padding: 10, marginBottom: 8 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                          <span style={{ fontSize: 12 }}>
+                            <span style={{ color: 'var(--hawk)' }}>🦅 {hawk.name}</span>
+                            <span style={{ color: 'var(--text-dim)', margin: '0 6px' }}>↔</span>
+                            <span style={{ color: 'var(--dove)' }}>🕊️ {dove.name}</span>
+                          </span>
+                          <button className="btn btn-danger" style={{ fontSize: 9, padding: '3px 8px' }} onClick={() => act('remove_staple', { id: hawk.id })}>Remove</button>
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>Hawk returns:</span>
+                          <input type="number" className="input" style={{ width: 90, padding: '4px 8px', fontSize: 12 }}
+                            placeholder="0"
+                            defaultValue={hawk.stapleTransferAmount ?? ''}
+                            onChange={e => act('set_staple_transfer', { hawkId: hawk.id, amount: parseFloat(e.target.value) || 0 })} />
+                          <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>pts</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+              </>
             )}
           </div>
 
-          {/* Admin message */}
-          <div className="card p-4">
-            <div className="font-mono text-xs mb-3" style={{ color: 'var(--text-dim)', letterSpacing: '0.2em' }}>BROADCAST MESSAGE</div>
-            <div className="flex gap-2">
-              <input
-                className="input-field flex-1"
-                placeholder="Message to players..."
-                value={msg}
-                onChange={e => setMsg(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && sendMessage()}
-              />
-              <button className="btn-primary px-3" onClick={sendMessage}>→</button>
+          {/* Full student table */}
+          <div className="card" style={{ padding: 16, gridColumn: '1 / -1' }}>
+            <div className="label" style={{ marginBottom: 12 }}>All Students — {state.students.length} total</div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    {['Name','Email','Points','Choice','Stapled','Eliminated'].map(h => (
+                      <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: 'var(--text-dim)', fontWeight: 400, fontSize: 10, letterSpacing: '0.15em' }}>{h.toUpperCase()}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...state.students].sort((a,b) => b.points - a.points).map((s, i) => (
+                    <tr key={s.id} style={{ borderBottom: '1px solid var(--border)', opacity: s.isEliminated ? 0.4 : 1, background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
+                      <td style={{ padding: '6px 10px', color: 'var(--text)' }}>{s.name}</td>
+                      <td style={{ padding: '6px 10px', color: 'var(--text-dim)' }}>{s.email}</td>
+                      <td style={{ padding: '6px 10px', color: 'var(--gold)', fontWeight: 500 }}>{s.points}</td>
+                      <td style={{ padding: '6px 10px' }}>
+                        {s.choice ? <span className={`tag tag-${s.choice}`}>{s.choice}</span> : <span style={{ color: 'var(--text-dim)' }}>—</span>}
+                      </td>
+                      <td style={{ padding: '6px 10px' }}>
+                        {s.staplePartnerId ? <span className="tag tag-staple">{s.isHawkInStaple ? '🦅 Hawk' : '🕊️ Dove'}</span> : '—'}
+                      </td>
+                      <td style={{ padding: '6px 10px', color: s.isEliminated ? 'var(--hawk)' : 'var(--text-dim)' }}>
+                        {s.isEliminated ? '💀' : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            {state.adminMessage && (
-              <div className="mt-2 font-mono text-xs" style={{ color: 'var(--gold)' }}>
-                Active: &quot;{state.adminMessage}&quot;
-                <button className="ml-2" style={{ color: 'var(--text-dim)' }} onClick={() => action('set_message', { message: '' })}>✕</button>
-              </div>
-            )}
-          </div>
-
-          {/* Display link */}
-          <div className="card p-4">
-            <div className="font-mono text-xs mb-2" style={{ color: 'var(--text-dim)', letterSpacing: '0.2em' }}>PROJECTOR</div>
-            <a href="/display" target="_blank" className="font-mono text-xs" style={{ color: 'var(--dove)' }}>
-              Open /display in new tab →
-            </a>
           </div>
         </div>
+      )}
 
-        {/* ── MIDDLE COLUMN: Pairings + Current round ── */}
-        <div className="flex flex-col gap-4">
-          <div className="card p-4">
-            <div className="font-mono text-xs mb-3" style={{ color: 'var(--text-dim)', letterSpacing: '0.2em' }}>
-              ROUND {state.roundNumber} · PAIRINGS
-            </div>
-            {state.currentPairings.length === 0 ? (
-              <p className="font-mono text-xs" style={{ color: 'var(--text-dim)' }}>No active pairings.</p>
-            ) : (
-              <div className="flex flex-col gap-2 max-h-96 overflow-y-auto">
-                {state.currentPairings.map(p => {
-                  const pA = state.players.find(pl => pl.id === p.playerAId)
-                  const pB = state.players.find(pl => pl.id === p.playerBId)
-                  return (
-                    <div key={p.id} className="card-elevated p-3">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-mono text-xs" style={{ color: p.isStapled ? 'var(--hawk)' : 'var(--text-secondary)' }}>
-                          {p.isStapled ? '📌 STAPLED' : `#${state.currentPairings.indexOf(p) + 1}`}
-                        </span>
-                        {p.resolved && <span className="font-mono text-xs" style={{ color: '#4caf50' }}>✓ resolved</span>}
-                      </div>
-                      <div className="flex gap-2">
-                        <PlayerChip player={pA} choice={p.choiceA} isRevealed={p.resolved} />
-                        <div className="font-mono text-xs self-center" style={{ color: 'var(--text-dim)' }}>VS</div>
-                        <PlayerChip player={pB} choice={p.choiceB} isRevealed={p.resolved} />
-                      </div>
-                      {p.result && (
-                        <div className="mt-2 font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>
-                          {p.result.summary}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
+      {/* ── ROUND REVIEW TAB ─────────────────────────────────────────────── */}
+      {tab === 'round' && (
+        <div>
+          {!state.pendingRound ? (
+            <div style={{ color: 'var(--text-dim)', fontSize: 13 }}>No round pending review. Compute a round first.</div>
+          ) : (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                <div>
+                  <div className="label">Round {state.pendingRound.round} — Pending Review</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>Computed {new Date(state.pendingRound.computedAt).toLocaleTimeString()}. Edit deltas below, then finalize.</div>
+                </div>
+                <button className="btn btn-hawk" style={{ padding: '10px 20px' }}
+                  onClick={async () => { await act('finalize_round'); setTab('history') }}>
+                  ✓ Finalize & Push Results
+                </button>
               </div>
-            )}
-          </div>
 
-          {/* Week 2: Stapled pairs management */}
-          {state.week === 2 && stapledPlayers.length > 0 && (
-            <div className="card p-4">
-              <div className="font-mono text-xs mb-3" style={{ color: 'var(--text-dim)', letterSpacing: '0.2em' }}>
-                📌 STAPLED PAIRS — HAWK TRANSFERS
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                      {['#','Type','Player A','Choice','Pts Before','Delta A','Player B','Choice','Pts Before','Delta B','Note','Edit'].map(h => (
+                        <th key={h} style={{ padding: '6px 8px', textAlign: 'left', color: 'var(--text-dim)', fontWeight: 400, fontSize: 10, letterSpacing: '0.12em', whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {state.pendingRound.pairings.map((p, i) => {
+                      const a = state.students.find(s => s.id === p.aId)
+                      const b = state.students.find(s => s.id === p.bId)
+                      const aAfter = state.pendingRound!.snapshotAfter[a?.name ?? '']
+                      const bAfter = state.pendingRound!.snapshotAfter[b?.name ?? '']
+                      const isEditing = !!editDeltas[p.pairingId]
+                      const isSitsOut = p.aId === p.bId
+                      const typeColor = p.type === 'H+H' ? 'var(--hawk)' : p.type === 'D+D' ? 'var(--green)' : p.type === 'STAPLED' ? 'var(--gold)' : 'var(--dove)'
+                      return (
+                        <tr key={p.pairingId} style={{ borderBottom: '1px solid var(--border)', background: isEditing ? 'rgba(232,160,32,0.04)' : 'transparent' }}>
+                          <td style={{ padding: '6px 8px', color: 'var(--text-dim)' }}>{i+1}</td>
+                          <td style={{ padding: '6px 8px' }}><span style={{ color: typeColor, fontSize: 11, fontWeight: 700 }}>{p.type}</span></td>
+                          <td style={{ padding: '6px 8px', color: 'var(--text)' }}>{a?.name ?? '?'}</td>
+                          <td style={{ padding: '6px 8px' }}><span className={`tag tag-${p.aChoice}`}>{p.aChoice[0].toUpperCase()}</span></td>
+                          <td style={{ padding: '6px 8px', color: 'var(--text-dim)' }}>{state.pendingRound!.snapshotBefore[a?.name ?? ''] ?? '?'}</td>
+                          <td style={{ padding: '6px 8px' }}>
+                            {isEditing
+                              ? <input type="number" style={{ width: 70, padding: '3px 6px', background: 'var(--bg)', border: '1px solid var(--gold)', color: 'var(--gold)', fontFamily: 'inherit', fontSize: 12 }}
+                                  value={editDeltas[p.pairingId]?.a ?? p.aDelta}
+                                  onChange={e => setEditDeltas(prev => ({...prev, [p.pairingId]: {...(prev[p.pairingId] || {a:String(p.aDelta),b:String(p.bDelta)}), a: e.target.value}}))} />
+                              : <span style={{ color: p.aDelta > 0 ? 'var(--green)' : p.aDelta < 0 ? 'var(--hawk)' : 'var(--text-dim)', fontWeight: 500 }}>
+                                  {p.aDelta > 0 ? '+' : ''}{p.aDelta} → <span style={{ color: 'var(--gold)' }}>{aAfter}</span>
+                                </span>
+                            }
+                          </td>
+                          <td style={{ padding: '6px 8px', color: 'var(--text)' }}>{isSitsOut ? '(sits out)' : b?.name ?? '?'}</td>
+                          <td style={{ padding: '6px 8px' }}>{!isSitsOut && <span className={`tag tag-${p.bChoice}`}>{p.bChoice[0].toUpperCase()}</span>}</td>
+                          <td style={{ padding: '6px 8px', color: 'var(--text-dim)' }}>{!isSitsOut && (state.pendingRound!.snapshotBefore[b?.name ?? ''] ?? '?')}</td>
+                          <td style={{ padding: '6px 8px' }}>
+                            {!isSitsOut && (isEditing
+                              ? <input type="number" style={{ width: 70, padding: '3px 6px', background: 'var(--bg)', border: '1px solid var(--gold)', color: 'var(--gold)', fontFamily: 'inherit', fontSize: 12 }}
+                                  value={editDeltas[p.pairingId]?.b ?? p.bDelta}
+                                  onChange={e => setEditDeltas(prev => ({...prev, [p.pairingId]: {...(prev[p.pairingId] || {a:String(p.aDelta),b:String(p.bDelta)}), b: e.target.value}}))} />
+                              : <span style={{ color: p.bDelta > 0 ? 'var(--green)' : p.bDelta < 0 ? 'var(--hawk)' : 'var(--text-dim)', fontWeight: 500 }}>
+                                  {p.bDelta > 0 ? '+' : ''}{p.bDelta} → <span style={{ color: 'var(--gold)' }}>{bAfter}</span>
+                                </span>
+                            )}
+                          </td>
+                          <td style={{ padding: '6px 8px', color: 'var(--text-dim)', fontSize: 11, maxWidth: 200 }}>{p.note}</td>
+                          <td style={{ padding: '6px 8px' }}>
+                            {!isSitsOut && (isEditing
+                              ? <div style={{ display: 'flex', gap: 4 }}>
+                                  <button className="btn btn-gold" style={{ padding: '3px 8px', fontSize: 10 }} onClick={() => updateDelta(p.pairingId)}>Save</button>
+                                  <button className="btn btn-ghost" style={{ padding: '3px 8px', fontSize: 10 }} onClick={() => setEditDeltas(prev => { const n={...prev}; delete n[p.pairingId]; return n })}>✕</button>
+                                </div>
+                              : <button className="btn btn-ghost" style={{ padding: '3px 8px', fontSize: 10 }} onClick={() => setEditDeltas(prev => ({...prev, [p.pairingId]: {a:String(p.aDelta),b:String(p.bDelta)}}))}>Edit</button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
-              <div className="flex flex-col gap-3">
-                {stapledPlayers.map(hawk => {
-                  const dove = state.players.find(p => p.id === hawk.staplePairId)
-                  if (!dove) return null
-                  return (
-                    <div key={hawk.id} className="card-elevated p-3">
-                      <div className="flex justify-between mb-2">
-                        <span className="font-mono text-xs hawk-text">🦅 {hawk.name} ({hawk.points}pts)</span>
-                        <span className="font-mono text-xs dove-text">🕊️ {dove.name} ({dove.points}pts)</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <input
-                          className="input-field flex-1"
-                          type="number"
-                          placeholder="Transfer amount"
-                          value={transferAmounts[hawk.id] || ''}
-                          onChange={e => setTransferAmounts(prev => ({ ...prev, [hawk.id]: e.target.value }))}
-                        />
-                        <button className="btn-primary px-3 text-xs" onClick={() => doTransfer(hawk.id)}>
-                          XFER →
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
+            </>
           )}
         </div>
+      )}
 
-        {/* ── RIGHT COLUMN: Leaderboard + Players ── */}
-        <div className="flex flex-col gap-4">
-          {/* Top 5 */}
-          <div className="card p-4">
-            <div className="font-mono text-xs mb-3" style={{ color: 'var(--text-dim)', letterSpacing: '0.2em' }}>LEADERBOARD</div>
-            <div className="flex flex-col gap-1">
-              {topPlayers.map((p, i) => (
-                <div key={p.id} className="flex items-center gap-2 py-1" style={{ borderBottom: '1px solid var(--border)' }}>
-                  <span className="font-mono text-xs w-4" style={{ color: i === 0 ? 'var(--gold)' : 'var(--text-dim)' }}>
-                    {i === 0 ? '★' : `${i + 1}`}
-                  </span>
-                  <span className="font-mono text-xs flex-1" style={{ color: p.isEliminated ? 'var(--text-dim)' : 'var(--text-primary)' }}>
-                    {p.name}{p.staplePairId ? ' 📌' : ''}
-                    {p.isEliminated ? ' 💀' : ''}
-                  </span>
-                  <span className="font-mono text-xs font-bold" style={{ color: 'var(--gold)' }}>{p.points}</span>
+      {/* ── HISTORY TAB ──────────────────────────────────────────────────── */}
+      {tab === 'history' && (
+        <div>
+          {state.rounds.length === 0
+            ? <div style={{ color: 'var(--text-dim)', fontSize: 13 }}>No finalized rounds yet.</div>
+            : [...state.rounds].reverse().map(r => (
+              <div key={r.round} className="card" style={{ padding: 16, marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 500 }}>Round {r.round} — Week {r.week}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+                      Finalized {r.finalizedAt ? new Date(r.finalizedAt).toLocaleString() : '—'}
+                      {' · '}{r.pairings.filter(p => p.aId !== p.bId).length} matchups
+                      {' · '}<span style={{ color: 'var(--hawk)' }}>{r.pairings.filter(p=>p.type==='H+H').length} H+H</span>
+                      {' · '}<span style={{ color: 'var(--dove)' }}>{r.pairings.filter(p=>p.type==='H+D').length} H+D</span>
+                      {' · '}<span style={{ color: 'var(--green)' }}>{r.pairings.filter(p=>p.type==='D+D').length} D+D</span>
+                      {r.pairings.some(p=>p.type==='STAPLED') && <span style={{ color: 'var(--gold)' }}>{' · '}{r.pairings.filter(p=>p.type==='STAPLED').length} Stapled</span>}
+                    </div>
+                  </div>
                 </div>
-              ))}
-            </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                        {['Type','Player A','Choice','Before','Delta','After','Player B','Choice','Before','Delta','After','Note'].map(h => (
+                          <th key={h} style={{ padding: '5px 8px', textAlign: 'left', color: 'var(--text-dim)', fontWeight: 400, fontSize: 10, letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {r.pairings.map((p, i) => {
+                        const a = state.students.find(s => s.id === p.aId)
+                        const b = state.students.find(s => s.id === p.bId)
+                        const aBefore = r.snapshotBefore[a?.name ?? ''] ?? 0
+                        const bBefore = r.snapshotBefore[b?.name ?? ''] ?? 0
+                        const aAfter = r.snapshotAfter[a?.name ?? ''] ?? 0
+                        const bAfter = r.snapshotAfter[b?.name ?? ''] ?? 0
+                        const tc = p.type==='H+H'?'var(--hawk)':p.type==='D+D'?'var(--green)':p.type==='STAPLED'?'var(--gold)':'var(--dove)'
+                        const isSitsOut = p.aId === p.bId
+                        return (
+                          <tr key={p.pairingId} style={{ borderBottom: '1px solid rgba(26,32,48,0.8)', background: i%2===0?'transparent':'rgba(255,255,255,0.01)' }}>
+                            <td style={{ padding: '5px 8px' }}><span style={{ color: tc, fontWeight: 700 }}>{p.type}</span></td>
+                            <td style={{ padding: '5px 8px', color: 'var(--text)' }}>{a?.name ?? '?'}</td>
+                            <td style={{ padding: '5px 8px' }}><span className={`tag tag-${p.aChoice}`} style={{ fontSize: 9 }}>{p.aChoice[0].toUpperCase()}</span></td>
+                            <td style={{ padding: '5px 8px', color: 'var(--text-dim)' }}>{aBefore}</td>
+                            <td style={{ padding: '5px 8px', color: p.aDelta>0?'var(--green)':p.aDelta<0?'var(--hawk)':'var(--text-dim)', fontWeight: 500 }}>{p.aDelta>0?'+':''}{p.aDelta}</td>
+                            <td style={{ padding: '5px 8px', color: 'var(--gold)' }}>{aAfter}</td>
+                            <td style={{ padding: '5px 8px', color: 'var(--text)' }}>{isSitsOut ? '(sits out)' : b?.name ?? '?'}</td>
+                            <td style={{ padding: '5px 8px' }}>{!isSitsOut && <span className={`tag tag-${p.bChoice}`} style={{ fontSize: 9 }}>{p.bChoice[0].toUpperCase()}</span>}</td>
+                            <td style={{ padding: '5px 8px', color: 'var(--text-dim)' }}>{!isSitsOut && bBefore}</td>
+                            <td style={{ padding: '5px 8px', color: p.bDelta>0?'var(--green)':p.bDelta<0?'var(--hawk)':'var(--text-dim)', fontWeight: 500 }}>{!isSitsOut && <>{p.bDelta>0?'+':''}{p.bDelta}</>}</td>
+                            <td style={{ padding: '5px 8px', color: 'var(--gold)' }}>{!isSitsOut && bAfter}</td>
+                            <td style={{ padding: '5px 8px', color: 'var(--text-dim)', maxWidth: 220, fontSize: 10 }}>{p.note}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+        </div>
+      )}
+
+      {/* ── INSIGHTS TAB ─────────────────────────────────────────────────── */}
+      {tab === 'insights' && <InsightsPanel students={state.students} rounds={state.rounds} />}
+    </div>
+  )
+}
+
+function StatPill({ label, value, color }: { label: string; value: string | number; color?: string }) {
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '4px 10px', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+      <span style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.1em' }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: 500, color: color || 'var(--gold)' }}>{value}</span>
+    </div>
+  )
+}
+
+function InsightsPanel({ students, rounds }: { students: Student[]; rounds: RoundRecord[] }) {
+  const active = students.filter(s => !s.isEliminated)
+  const hawks = active.filter(s => s.choice === 'hawk')
+  const doves = active.filter(s => s.choice === 'dove')
+  const sorted = [...active].sort((a,b) => b.points - a.points)
+  const total = active.reduce((s,x) => s+x.points, 0)
+  const avg = active.length ? Math.round(total / active.length) : 0
+  const top = sorted[0]; const bottom = sorted[sorted.length - 1]
+
+  const dovePts = doves.map(s => s.points)
+  const hawkPts = hawks.map(s => s.points)
+  const doveAvg = dovePts.length ? Math.round(dovePts.reduce((a,b)=>a+b,0)/dovePts.length) : 0
+  const hawkAvg = hawkPts.length ? Math.round(hawkPts.reduce((a,b)=>a+b,0)/hawkPts.length) : 0
+  const doveUnder400 = dovePts.length ? Math.round(dovePts.filter(p=>p<400).length/dovePts.length*100) : 0
+  const hawkOver500 = hawkPts.length ? Math.round(hawkPts.filter(p=>p>500).length/hawkPts.length*100) : 0
+  const maxPts = sorted[0]?.points || 1
+
+  const quotes = [
+    `${doveUnder400}% of doves have fewer than 400 points.`,
+    `Hawks average ${hawkAvg} pts vs doves at ${doveAvg} pts.`,
+    `${hawkOver500}% of hawks hold over 500 points.`,
+    `Top ${Math.round(active.length * 0.2)} players control ${Math.round(sorted.slice(0,Math.ceil(active.length*0.2)).reduce((s,x)=>s+x.points,0)/total*100)}% of all points.`,
+  ]
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      {/* Quote cards */}
+      {quotes.map((q, i) => (
+        <div key={i} className="card" style={{ padding: 20 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6, letterSpacing: '0.1em' }}>INSIGHT {i+1}</div>
+          <div style={{ fontSize: 16, color: 'var(--gold)', lineHeight: 1.5 }}>"{q}"</div>
+        </div>
+      ))}
+
+      {/* Distribution */}
+      <div className="card" style={{ padding: 16, gridColumn: '1/-1' }}>
+        <div className="label" style={{ marginBottom: 12 }}>Choice distribution (current round)</div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ flex: hawks.length, height: 24, background: 'var(--hawk-bg)', border: '1px solid var(--hawk)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--hawk)', transition: 'flex 0.5s' }}>
+            🦅 {hawks.length} Hawks ({active.length ? Math.round(hawks.length/active.length*100) : 0}%)
           </div>
-
-          {/* All players */}
-          <div className="card p-4 flex-1">
-            <div className="font-mono text-xs mb-3" style={{ color: 'var(--text-dim)', letterSpacing: '0.2em' }}>
-              ALL PLAYERS ({state.players.length})
-            </div>
-            <div className="flex flex-col gap-1 max-h-80 overflow-y-auto">
-              {[...state.players].sort((a,b) => b.points - a.points).map(p => (
-                <div key={p.id} className="flex items-center gap-2 py-1" style={{ borderBottom: '1px solid var(--border)', opacity: p.isEliminated ? 0.4 : 1 }}>
-                  <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${state.phase === 'submit' ? (p.hasSubmitted ? 'bg-green-500' : 'blink') : ''}`}
-                    style={{ background: p.isEliminated ? 'var(--text-dim)' : state.phase === 'submit' ? undefined : 'var(--dove)' }} />
-                  <span className="font-mono text-xs flex-1 truncate" style={{ color: 'var(--text-primary)' }}>
-                    {p.name}
-                  </span>
-                  <span className="font-mono text-xs" style={{ color: 'var(--text-dim)' }}>#{p.cardNumber}</span>
-                  <span className="font-mono text-xs font-bold" style={{ color: 'var(--gold)' }}>{p.points}</span>
-                </div>
-              ))}
-            </div>
+          <div style={{ flex: doves.length || 0.01, height: 24, background: 'var(--dove-bg)', border: '1px solid var(--dove)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--dove)', transition: 'flex 0.5s' }}>
+            🕊️ {doves.length} Doves ({active.length ? Math.round(doves.length/active.length*100) : 0}%)
+          </div>
+          <div style={{ flex: active.filter(s=>!s.choice).length || 0.01, height: 24, background: 'var(--bg-raised)', border: '1px solid var(--border-hi)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--text-dim)', transition: 'flex 0.5s' }}>
+            — {active.filter(s=>!s.choice).length} no choice
           </div>
         </div>
       </div>
-    </main>
-  )
-}
 
-function StatusBadge({ phase }: { phase: string }) {
-  const colors: Record<string, string> = {
-    lobby: 'var(--text-secondary)',
-    submit: 'var(--dove)',
-    reveal: 'var(--gold)',
-    resolved: 'var(--hawk)',
-  }
-  return (
-    <div className="flex items-center gap-2 px-3 py-1.5" style={{ border: `1px solid ${colors[phase] || 'var(--border)'}` }}>
-      <div className="w-1.5 h-1.5 rounded-full blink" style={{ background: colors[phase] }} />
-      <span className="font-mono text-xs" style={{ color: colors[phase] }}>{phase.toUpperCase()}</span>
-    </div>
-  )
-}
+      {/* Points leaderboard bar chart */}
+      <div className="card" style={{ padding: 16, gridColumn: '1/-1' }}>
+        <div className="label" style={{ marginBottom: 12 }}>Points distribution — all players</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {sorted.map((s, i) => (
+            <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 160, fontSize: 11, color: 'var(--text-mid)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</div>
+              <div style={{ flex: 1, height: 14, background: 'var(--bg-raised)', position: 'relative' }}>
+                <div style={{
+                  position: 'absolute', left: 0, top: 0, height: '100%',
+                  width: `${(s.points / maxPts) * 100}%`,
+                  background: s.choice === 'hawk' ? 'var(--hawk-bg)' : s.choice === 'dove' ? 'var(--dove-bg)' : 'var(--bg-raised)',
+                  borderRight: `2px solid ${s.choice === 'hawk' ? 'var(--hawk)' : s.choice === 'dove' ? 'var(--dove)' : 'var(--border-hi)'}`,
+                  transition: 'width 0.5s',
+                }} />
+              </div>
+              <div style={{ width: 60, textAlign: 'right', fontSize: 11, color: 'var(--gold)', fontWeight: 500 }}>{s.points}</div>
+            </div>
+          ))}
+        </div>
+      </div>
 
-function Stat({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div>
-      <div className="font-mono text-xs" style={{ color: 'var(--text-dim)' }}>{label}</div>
-      <div className="font-mono text-xl font-bold" style={{ color: 'var(--gold)' }}>{value}</div>
-    </div>
-  )
-}
+      {/* Stats grid */}
+      <div className="card" style={{ padding: 16 }}>
+        <div className="label" style={{ marginBottom: 12 }}>Key stats</div>
+        {[
+          ['Total players', active.length],
+          ['Total points in play', total],
+          ['Average points', avg],
+          ['Richest', `${top?.name?.split(',')[0] ?? '—'} (${top?.points ?? 0})`],
+          ['Least points', `${bottom?.name?.split(',')[0] ?? '—'} (${bottom?.points ?? 0})`],
+          ['Rounds played', rounds.length],
+        ].map(([label, val]) => (
+          <div key={label as string} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
+            <span style={{ color: 'var(--text-dim)' }}>{label}</span>
+            <span style={{ color: 'var(--text)', fontWeight: 500 }}>{val}</span>
+          </div>
+        ))}
+      </div>
 
-function PlayerChip({ player, choice, isRevealed }: { player?: { name: string; points: number }; choice?: string; isRevealed: boolean }) {
-  return (
-    <div className="flex-1 p-2 text-center" style={{ border: '1px solid var(--border)', background: 'var(--bg)' }}>
-      <div className="font-mono text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{player?.name ?? '?'}</div>
-      <div className="font-mono text-xs" style={{ color: 'var(--gold)' }}>{player?.points}pts</div>
-      {isRevealed && choice && (
-        <div className={`font-mono text-xs font-bold mt-1 ${choice === 'hawk' ? 'hawk-text' : 'dove-text'}`}>
-          {choice === 'hawk' ? '🦅' : '🕊️'}
+      {/* Round-by-round H vs D summary */}
+      {rounds.length > 0 && (
+        <div className="card" style={{ padding: 16 }}>
+          <div className="label" style={{ marginBottom: 12 }}>Rounds summary</div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                {['Round','H+H','H+D','D+D','Stapled'].map(h => (
+                  <th key={h} style={{ padding: '4px 6px', textAlign: 'center', color: 'var(--text-dim)', fontWeight: 400, fontSize: 10 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rounds.map(r => (
+                <tr key={r.round} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td style={{ padding: '4px 6px', textAlign: 'center', color: 'var(--text-mid)' }}>{r.round}</td>
+                  <td style={{ padding: '4px 6px', textAlign: 'center', color: 'var(--hawk)' }}>{r.pairings.filter(p=>p.type==='H+H').length}</td>
+                  <td style={{ padding: '4px 6px', textAlign: 'center', color: 'var(--dove)' }}>{r.pairings.filter(p=>p.type==='H+D').length}</td>
+                  <td style={{ padding: '4px 6px', textAlign: 'center', color: 'var(--green)' }}>{r.pairings.filter(p=>p.type==='D+D').length}</td>
+                  <td style={{ padding: '4px 6px', textAlign: 'center', color: 'var(--gold)' }}>{r.pairings.filter(p=>p.type==='STAPLED').length}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
