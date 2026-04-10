@@ -15,10 +15,15 @@ interface RoundRecord {
   snapshotBefore: Record<string,number>; snapshotAfter: Record<string,number>
 }
 interface GameInfo {
-  roundOpen: boolean; currentRound: number; week: number
+  roundOpen: boolean; currentRound: number; week: number; displayRound?: number
   students: StudentInfo[]
   lastRound: RoundRecord | null
   rounds?: RoundRecord[]
+}
+
+function fmt(n: number) {
+  const rounded = Math.round(n * 100) / 100
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2).replace(/\.?0+$/, '')
 }
 
 export default function DisplayPage() {
@@ -55,6 +60,7 @@ export default function DisplayPage() {
   const hh = String(Math.floor(tick/3600)).padStart(2,'0')
   const mm = String(Math.floor((tick%3600)/60)).padStart(2,'0')
   const ss = String(tick%60).padStart(2,'0')
+  const shownRound = game.displayRound ?? game.currentRound
 
   return (
     <div style={{ minHeight:'100vh', display:'flex', flexDirection:'column', background:'var(--bg)', fontFamily:'DM Mono, Courier New, monospace' }}>
@@ -67,7 +73,7 @@ export default function DisplayPage() {
           <span style={{ color:'var(--dove)' }}>DOVE</span>
         </div>
         <div style={{ display:'flex', gap:12, alignItems:'center' }}>
-          {[['WEEK', game.week], ['ROUND', game.currentRound||'—'], ['ACTIVE', active.length], ['PTS', total]].map(([l,v]) => (
+          {([['WEEK', game.week], ['ROUND', shownRound||'—'], ['ACTIVE', active.length], ['PTS', fmt(total)]] as [string, string|number][]).map(([l,v]) => (
             <div key={String(l)} style={{ textAlign:'center' }}>
               <div style={{ fontSize:9, color:'var(--text-dim)', letterSpacing:'0.2em' }}>{l}</div>
               <div style={{ fontSize:16, fontWeight:500, color:'var(--gold)' }}>{v}</div>
@@ -96,7 +102,6 @@ export default function DisplayPage() {
           </button>
         ))}
         <div style={{ flex:1 }} />
-        {/* Nav links */}
         <a href="/player" target="_blank"
           style={{ padding:'9px 16px', fontSize:11, letterSpacing:'0.1em', color:'var(--dove)',
             textDecoration:'none', display:'flex', alignItems:'center', borderLeft:'1px solid var(--border)' }}>
@@ -132,75 +137,49 @@ export default function DisplayPage() {
                 {sorted.map((s,i) => (
                   <div key={s.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 10px',
                     border:'1px solid var(--border)', background:'var(--bg-card)', position:'relative', overflow:'hidden' }}>
-                    {/* Bar */}
                     <div style={{ position:'absolute', left:0, top:0, bottom:0, transition:'width 0.7s',
                       width:`${(s.points/maxPts)*100}%`, opacity:0.08,
                       background: s.choice==='hawk'?'var(--hawk)':s.choice==='dove'?'var(--dove)':'var(--text-dim)' }} />
                     <span style={{ fontSize:12, color:i===0?'var(--gold)':i===1?'#c0c0c0':i===2?'#cd7f32':'var(--text-dim)', width:20, textAlign:'right', flexShrink:0, position:'relative' }}>
                       {i===0?'★':i+1}
                     </span>
-                    <span style={{ fontSize:13, flex:1, color:'var(--text)', position:'relative', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-                      {s.name}{s.staplePartnerId ? ' 📌' : ''}
+                    <span style={{ flex:1, fontSize:13, color:'var(--text)', position:'relative', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                      {s.name}
+                      {s.staplePartnerId && <span style={{ fontSize:10, color:'var(--gold)', marginLeft:6 }}>📌</span>}
                     </span>
-                    {game.roundOpen && s.hasChosen && (
-                      <span style={{ fontSize:10, color:'var(--green)', position:'relative' }}>✓</span>
+                    {s.hasChosen && s.choice && (
+                      <span style={{ fontSize:10, position:'relative', flexShrink:0,
+                        color: s.choice==='hawk'?'var(--hawk)':'var(--dove)' }}>
+                        {s.choice==='hawk'?'🦅':'🕊️'}
+                      </span>
                     )}
-                    {s.choice && !game.roundOpen && (
-                      <span className={`tag tag-${s.choice}`} style={{ fontSize:10, position:'relative' }}>{s.choice[0].toUpperCase()}</span>
-                    )}
-                    <span style={{ fontSize:14, fontWeight:500, color:'var(--gold)', minWidth:60, textAlign:'right', position:'relative' }}>{s.points}</span>
+                    <span style={{ fontSize:14, fontWeight:500, color:'var(--gold)', position:'relative', flexShrink:0, minWidth:60, textAlign:'right' }}>
+                      {fmt(s.points)}
+                    </span>
                   </div>
                 ))}
-                {game.students.filter(s=>s.isEliminated).length > 0 && (
-                  <div style={{ marginTop:8, fontSize:11, color:'var(--text-dim)' }}>
-                    💀 Eliminated: {game.students.filter(s=>s.isEliminated).map(s=>s.name.split(',')[0]).join(', ')}
-                  </div>
-                )}
               </div>
             </div>
 
             {/* Right panel */}
             <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-              {/* H vs D split */}
-              <div style={{ padding:14, background:'var(--bg-card)', border:'1px solid var(--border)' }}>
-                <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:10 }}>CHOICE SPLIT</div>
-                <div style={{ display:'flex', gap:4, height:32, marginBottom:8 }}>
-                  {hawks.length > 0 && (
-                    <div style={{ flex:hawks.length, background:'var(--hawk-bg)', border:'1px solid var(--hawk)',
-                      display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, color:'var(--hawk)', transition:'flex 0.5s' }}>
-                      🦅 {hawks.length}
-                    </div>
-                  )}
-                  {doves.length > 0 && (
-                    <div style={{ flex:doves.length, background:'var(--dove-bg)', border:'1px solid var(--dove)',
-                      display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, color:'var(--dove)', transition:'flex 0.5s' }}>
-                      🕊️ {doves.length}
-                    </div>
-                  )}
-                  {active.filter(s=>!s.choice).length > 0 && (
-                    <div style={{ flex:active.filter(s=>!s.choice).length, background:'var(--bg-raised)', border:'1px solid var(--border-hi)',
-                      display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, color:'var(--text-dim)' }}>
-                      — {active.filter(s=>!s.choice).length}
-                    </div>
-                  )}
-                </div>
-                <div style={{ fontSize:11, color:'var(--text-dim)' }}>
-                  {active.length > 0 ? Math.round(hawks.length/active.length*100) : 0}% hawk · {active.length > 0 ? Math.round(doves.length/active.length*100) : 0}% dove
-                </div>
-              </div>
-
               {/* Protectorates */}
-              {game.students.filter(s=>s.staplePartnerId&&s.isHawkInStaple).length > 0 && (
+              {game.students.filter(s => s.staplePartnerId && s.isHawkInStaple).length > 0 && (
                 <div style={{ padding:14, background:'var(--bg-card)', border:'1px solid var(--border)' }}>
-                  <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:10 }}>📌 PROTECTORATES</div>
-                  {game.students.filter(s=>s.staplePartnerId&&s.isHawkInStaple).map(hawk => {
-                    const dove = game.students.find(s=>s.id===hawk.staplePartnerId)
+                  <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:10 }}>PROTECTORATES</div>
+                  {game.students.filter(s => s.staplePartnerId && s.isHawkInStaple).map(hawk => {
+                    const dove = game.students.find(s => s.id === hawk.staplePartnerId)
                     if (!dove) return null
                     return (
-                      <div key={hawk.id} style={{ marginBottom:8, padding:'6px 8px', background:'var(--bg)', border:'1px solid var(--border)', fontSize:11 }}>
-                        <div><span style={{ color:'var(--hawk)' }}>🦅 {hawk.name.split(',')[0]}</span></div>
-                        <div style={{ color:'var(--text-dim)', margin:'1px 0', fontSize:10 }}>↕</div>
-                        <div><span style={{ color:'var(--dove)' }}>🕊️ {dove.name.split(',')[0]}</span></div>
+                      <div key={hawk.id} style={{ marginBottom:8, padding:'7px 10px', background:'var(--bg)', border:'1px solid var(--border)' }}>
+                        <div style={{ display:'flex', justifyContent:'space-between', fontSize:12 }}>
+                          <span style={{ color:'var(--hawk)' }}>🦅 {hawk.name.split(',')[0]}</span>
+                          <span style={{ color:'var(--gold)', fontSize:11 }}>{fmt(hawk.points)}</span>
+                        </div>
+                        <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, marginTop:3 }}>
+                          <span style={{ color:'var(--dove)' }}>🕊️ {dove.name.split(',')[0]}</span>
+                          <span style={{ color:'var(--gold)', fontSize:11 }}>{fmt(dove.points)}</span>
+                        </div>
                       </div>
                     )
                   })}
@@ -208,31 +187,27 @@ export default function DisplayPage() {
               )}
 
               {/* Last round results */}
-              {game.lastRound && !game.roundOpen && (
-                <div style={{ padding:14, background:'var(--bg-card)', border:'1px solid var(--border)', flex:1, overflow:'auto' }}>
-                  <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:10 }}>
-                    ROUND {game.lastRound.round} RESULTS
+              {game.lastRound && (
+                <div style={{ padding:14, background:'var(--bg-card)', border:'1px solid var(--border)' }}>
+                  <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:10 }}>ROUND {game.lastRound.round} RESULTS</div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:4, maxHeight:300, overflowY:'auto' }}>
+                    {game.lastRound.pairings.filter(p => p.aId !== p.bId).slice(0,10).map(p => {
+                      const a = game.students.find(s => s.id === p.aId)
+                      const b = game.students.find(s => s.id === p.bId)
+                      const tc = p.type==='H+H'?'var(--hawk)':p.type==='D+D'?'var(--dove)':p.type==='STAPLED'?'var(--gold)':'var(--text-mid)'
+                      return (
+                        <div key={p.pairingId} style={{ fontSize:10, display:'flex', gap:4, alignItems:'center', padding:'3px 0', borderBottom:'1px solid var(--border)' }}>
+                          <span style={{ color:tc, width:36, flexShrink:0 }}>{p.type}</span>
+                          <span style={{ flex:1, color:'var(--text-mid)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                            {a?.name.split(',')[0]??'?'} vs {b?.name.split(',')[0]??'?'}
+                          </span>
+                          <span style={{ color:p.aDelta>0?'var(--green)':p.aDelta<0?'var(--hawk)':'var(--text-dim)', flexShrink:0 }}>
+                            {p.aDelta>0?'+':''}{fmt(p.aDelta)}
+                          </span>
+                        </div>
+                      )
+                    })}
                   </div>
-                  {game.lastRound.pairings.filter(p=>p.aId!==p.bId).map(p => {
-                    const a = game.students.find(s=>s.id===p.aId)
-                    const b = game.students.find(s=>s.id===p.bId)
-                    const tc = p.type==='H+H'?'var(--hawk)':p.type==='D+D'?'var(--green)':p.type==='STAPLED'?'var(--gold)':'var(--dove)'
-                    return (
-                      <div key={p.pairingId} style={{ marginBottom:6, padding:'6px 8px', background:'var(--bg)', border:'1px solid var(--border)' }}>
-                        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:3 }}>
-                          <span style={{ fontSize:10, color:tc, fontWeight:700 }}>{p.type}</span>
-                        </div>
-                        <div style={{ fontSize:11, display:'flex', justifyContent:'space-between' }}>
-                          <span style={{ color:'var(--text)' }}>{a?.name.split(',')[0]??'?'}</span>
-                          <span style={{ color:p.aDelta>0?'var(--green)':p.aDelta<0?'var(--hawk)':'var(--text-dim)', fontWeight:500 }}>{p.aDelta>0?'+':''}{p.aDelta}</span>
-                        </div>
-                        <div style={{ fontSize:11, display:'flex', justifyContent:'space-between' }}>
-                          <span style={{ color:'var(--text)' }}>{b?.name.split(',')[0]??'?'}</span>
-                          <span style={{ color:p.bDelta>0?'var(--green)':p.bDelta<0?'var(--hawk)':'var(--text-dim)', fontWeight:500 }}>{p.bDelta>0?'+':''}{p.bDelta}</span>
-                        </div>
-                      </div>
-                    )
-                  })}
                 </div>
               )}
             </div>
@@ -240,7 +215,7 @@ export default function DisplayPage() {
         )}
 
         {/* ── CHARTS ── */}
-        {tab === 'charts' && <ChartsPanel students={game.students} lastRound={game.lastRound} currentRound={game.currentRound} />}
+        {tab === 'charts' && <ChartsPanel game={game} />}
 
         {/* ── PAIRINGS ── */}
         {tab === 'pairings' && game.lastRound && (
@@ -250,27 +225,25 @@ export default function DisplayPage() {
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px,1fr))', gap:10 }}>
               {game.lastRound.pairings.filter(p=>p.aId!==p.bId).map(p => {
-                const a = game.students.find(s=>s.id===p.aId)
-                const b = game.students.find(s=>s.id===p.bId)
-                const tc = p.type==='H+H'?'var(--hawk)':p.type==='D+D'?'var(--green)':p.type==='STAPLED'?'var(--gold)':'var(--dove)'
+                const a = game.students.find(s => s.id === p.aId)
+                const b = game.students.find(s => s.id === p.bId)
+                const tc = p.type==='H+H'?'var(--hawk)':p.type==='D+D'?'var(--dove)':p.type==='STAPLED'?'var(--gold)':'var(--text-mid)'
                 return (
-                  <div key={p.pairingId} style={{ padding:12, background:'var(--bg-card)', border:`1px solid var(--border)`, borderTop:`2px solid ${tc}` }}>
-                    <div style={{ fontSize:11, color:tc, fontWeight:700, marginBottom:8 }}>{p.type}</div>
-                    <div style={{ display:'flex', gap:8, marginBottom:8 }}>
-                      {[{name:a?.name,choice:p.aChoice,delta:p.aDelta},{name:b?.name,choice:p.bChoice,delta:p.bDelta}].map((side,si) => (
-                        <div key={si} style={{ flex:1, padding:'8px 6px', background:'var(--bg)', border:'1px solid var(--border)', textAlign:'center' }}>
-                          <div style={{ fontSize:11, color:'var(--text)', marginBottom:4, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-                            {side.name?.split(',')[0]??'?'}
-                          </div>
-                          <span className={`tag tag-${side.choice}`} style={{ fontSize:10 }}>{side.choice[0].toUpperCase()}</span>
-                          <div style={{ fontSize:13, fontWeight:500, marginTop:4,
-                            color:side.delta>0?'var(--green)':side.delta<0?'var(--hawk)':'var(--text-dim)' }}>
-                            {side.delta>0?'+':''}{side.delta}
-                          </div>
-                        </div>
-                      ))}
+                  <div key={p.pairingId} style={{ padding:12, background:'var(--bg-card)', border:`1px solid ${tc}33` }}>
+                    <div style={{ fontSize:10, color:tc, letterSpacing:'0.15em', marginBottom:8 }}>{p.type}</div>
+                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
+                      <span style={{ fontSize:12, color:'var(--text)' }}>{a?.name.split(',')[0]??'?'}</span>
+                      <span style={{ fontSize:12, color:p.aDelta>0?'var(--green)':p.aDelta<0?'var(--hawk)':'var(--text-dim)' }}>
+                        {p.aDelta>0?'+':''}{fmt(p.aDelta)}
+                      </span>
                     </div>
-                    <div style={{ fontSize:10, color:'var(--text-dim)', lineHeight:1.5 }}>{p.note}</div>
+                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
+                      <span style={{ fontSize:12, color:'var(--text)' }}>{b?.name.split(',')[0]??'?'}</span>
+                      <span style={{ fontSize:12, color:p.bDelta>0?'var(--green)':p.bDelta<0?'var(--hawk)':'var(--text-dim)' }}>
+                        {p.bDelta>0?'+':''}{fmt(p.bDelta)}
+                      </span>
+                    </div>
+                    <div style={{ fontSize:10, color:'var(--text-dim)', lineHeight:1.4 }}>{p.note}</div>
                   </div>
                 )
               })}
@@ -278,53 +251,48 @@ export default function DisplayPage() {
           </div>
         )}
       </div>
-
-      {/* Ticker */}
-      <div style={{ background:'var(--bg-card)', borderTop:'1px solid var(--border)', padding:'5px 0', overflow:'hidden', flexShrink:0 }}>
-        <div style={{ animation:'ticker 28s linear infinite', whiteSpace:'nowrap', fontSize:11, color:'var(--text-dim)', letterSpacing:'0.08em' }}>
-          HAWK EXPLOITS · DOVE COOPERATES · H+H: HIGHER PTS TAKES ALL · D+D: BOTH GAIN +1–20 · H+D: HAWK TAKES 25%×3 · TIEBREAKER RESOLVES H+H TIES &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-        </div>
-      </div>
     </div>
   )
 }
 
-function ChartsPanel({ students, lastRound, currentRound }: {
-  students: StudentInfo[]
-  lastRound: RoundRecord | null
-  currentRound: number
-}) {
-  const active = [...students].filter(s => !s.isEliminated).sort((a,b) => b.points - a.points)
-  const eliminated = students.filter(s => s.isEliminated)
+function ChartsPanel({ game }: { game: GameInfo }) {
+  const active = game.students.filter(s => !s.isEliminated)
+  const sorted = [...active].sort((a,b) => b.points - a.points)
   const hawks = active.filter(s => s.choice === 'hawk')
   const doves = active.filter(s => s.choice === 'dove')
+  const students = game.students
+  const eliminated = students.filter(s => s.isEliminated)
+  const lastRound = game.lastRound
+  const maxPts = sorted[0]?.points || 1
+
+  const hawkPts = hawks.map(s => s.points)
+  const dovePts = doves.map(s => s.points)
+  const hawkAvg = hawkPts.length ? Math.round(hawkPts.reduce((a,b)=>a+b,0)/hawkPts.length) : 0
+  const doveAvg = dovePts.length ? Math.round(dovePts.reduce((a,b)=>a+b,0)/dovePts.length) : 0
   const total = active.reduce((s,x) => s+x.points, 0)
-  const maxPts = active[0]?.points || 1
-  const hawkAvg = hawks.length ? Math.round(hawks.reduce((s,x)=>s+x.points,0)/hawks.length) : 0
-  const doveAvg = doves.length ? Math.round(doves.reduce((s,x)=>s+x.points,0)/doves.length) : 0
-  const doveUnder400 = doves.length ? Math.round(doves.filter(p=>p.points<400).length/doves.length*100) : 0
-  const hawkOver500 = hawks.length ? Math.round(hawks.filter(p=>p.points>500).length/hawks.length*100) : 0
-  const top20 = active.slice(0, Math.ceil(active.length*0.2))
-  const top20share = total > 0 ? Math.round(top20.reduce((s,x)=>s+x.points,0)/total*100) : 0
+  const doveUnder400 = dovePts.length ? Math.round(dovePts.filter(p=>p<400).length/dovePts.length*100) : 0
+  const hawkOver500 = hawkPts.length ? Math.round(hawkPts.filter(p=>p>500).length/hawkPts.length*100) : 0
+  const top20pct = sorted.slice(0, Math.ceil(active.length * 0.2))
+  const top20pts = top20pct.reduce((s,x)=>s+x.points,0)
+  const top20share = total > 0 ? Math.round(top20pts/total*100) : 0
 
   const quotes = [
-    `${doveUnder400}% of doves hold fewer than 400 points`,
-    `Hawks avg ${hawkAvg} pts vs doves at ${doveAvg} pts`,
-    `${hawkOver500}% of hawks hold over 500 points`,
-    `Top 20% control ${top20share}% of all points in play`,
+    `${doveUnder400}% of doves hold fewer than 400 pts.`,
+    `Hawks avg ${fmt(hawkAvg)} pts vs doves at ${fmt(doveAvg)} pts.`,
+    `${hawkOver500}% of hawks hold over 500 pts.`,
+    `Top 20% of players control ${top20share}% of all pts.`,
   ]
 
-  // Points distribution buckets
+  // Bucket distribution
   const buckets = [
-    { label:'0', max:1, count: students.filter(s=>s.points<=0).length },
-    { label:'1–99', max:100, count: active.filter(s=>s.points>=1&&s.points<100).length },
-    { label:'100–299', max:300, count: active.filter(s=>s.points>=100&&s.points<300).length },
-    { label:'300–599', max:600, count: active.filter(s=>s.points>=300&&s.points<600).length },
-    { label:'600+', max:9999, count: active.filter(s=>s.points>=600).length },
+    { label:'0', count: active.filter(s=>s.points===0).length },
+    { label:'1–99', count: active.filter(s=>s.points>0&&s.points<100).length },
+    { label:'100–299', count: active.filter(s=>s.points>=100&&s.points<300).length },
+    { label:'300–599', count: active.filter(s=>s.points>=300&&s.points<600).length },
+    { label:'600+', count: active.filter(s=>s.points>=600).length },
   ]
   const maxBucket = Math.max(...buckets.map(b=>b.count), 1)
 
-  // Gains/losses this round
   const roundGains = lastRound ? active.map(s => ({
     name: s.name.split(',')[0],
     delta: (lastRound.snapshotAfter[s.name] ?? s.points) - (lastRound.snapshotBefore[s.name] ?? s.points),
@@ -335,7 +303,6 @@ function ChartsPanel({ students, lastRound, currentRound }: {
 
   return (
     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
-
       {/* Insight quotes */}
       <div style={{ gridColumn:'1/-1', display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
         {quotes.map((q,i) => (
@@ -346,7 +313,7 @@ function ChartsPanel({ students, lastRound, currentRound }: {
         ))}
       </div>
 
-      {/* Bar chart: points distribution */}
+      {/* Points distribution */}
       <div style={{ padding:16, background:'var(--bg-card)', border:'1px solid var(--border)' }}>
         <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:14 }}>POINTS DISTRIBUTION</div>
         <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
@@ -365,11 +332,11 @@ function ChartsPanel({ students, lastRound, currentRound }: {
         </div>
       </div>
 
-      {/* Bar chart: leaderboard bars */}
+      {/* All players bars */}
       <div style={{ padding:16, background:'var(--bg-card)', border:'1px solid var(--border)' }}>
         <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:14 }}>ALL PLAYERS — POINTS</div>
         <div style={{ display:'flex', flexDirection:'column', gap:4, maxHeight:300, overflowY:'auto' }}>
-          {active.map((s,i) => (
+          {sorted.map((s,i) => (
             <div key={s.id} style={{ display:'flex', alignItems:'center', gap:6 }}>
               <div style={{ width:110, fontSize:11, color:i===0?'var(--gold)':'var(--text-mid)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
                 {s.name.split(',')[0]}
@@ -380,18 +347,16 @@ function ChartsPanel({ students, lastRound, currentRound }: {
                   background: s.choice==='hawk'?'var(--hawk-bg)':s.choice==='dove'?'var(--dove-bg)':'var(--bg)',
                   borderRight:`2px solid ${s.choice==='hawk'?'var(--hawk)':s.choice==='dove'?'var(--dove)':'var(--border-hi)'}` }} />
               </div>
-              <div style={{ width:50, textAlign:'right', fontSize:11, color:'var(--gold)', fontWeight:500 }}>{s.points}</div>
+              <div style={{ width:55, textAlign:'right', fontSize:11, color:'var(--gold)', fontWeight:500 }}>{fmt(s.points)}</div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Gains this round */}
+      {/* Top gainers */}
       {lastRound && topGainers.length > 0 && (
         <div style={{ padding:16, background:'var(--bg-card)', border:'1px solid var(--border)' }}>
-          <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:14 }}>
-            ROUND {lastRound.round} — TOP GAINERS
-          </div>
+          <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:14 }}>ROUND {lastRound.round} — TOP GAINERS</div>
           <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
             {topGainers.map(g => (
               <div key={g.name} style={{ display:'flex', alignItems:'center', gap:8 }}>
@@ -402,7 +367,7 @@ function ChartsPanel({ students, lastRound, currentRound }: {
                     background:'var(--green-bg)', borderRight:'2px solid var(--green)' }} />
                 </div>
                 <div style={{ width:60, textAlign:'right', fontSize:12, color:'var(--green)', fontWeight:500 }}>
-                  {g.delta>0?'+':''}{Math.round(g.delta*100)/100}
+                  {g.delta>0?'+':''}{fmt(g.delta)}
                 </div>
               </div>
             ))}
@@ -410,12 +375,10 @@ function ChartsPanel({ students, lastRound, currentRound }: {
         </div>
       )}
 
-      {/* Losses this round */}
+      {/* Top losers */}
       {lastRound && topLosers.length > 0 && (
         <div style={{ padding:16, background:'var(--bg-card)', border:'1px solid var(--border)' }}>
-          <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:14 }}>
-            ROUND {lastRound.round} — BIGGEST LOSSES
-          </div>
+          <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:14 }}>ROUND {lastRound.round} — BIGGEST LOSSES</div>
           <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
             {topLosers.filter(g=>g.delta<0).map(g => (
               <div key={g.name} style={{ display:'flex', alignItems:'center', gap:8 }}>
@@ -426,7 +389,7 @@ function ChartsPanel({ students, lastRound, currentRound }: {
                     background:'var(--hawk-bg)', borderRight:'2px solid var(--hawk)' }} />
                 </div>
                 <div style={{ width:60, textAlign:'right', fontSize:12, color:'var(--hawk)', fontWeight:500 }}>
-                  {Math.round(g.delta*100)/100}
+                  {fmt(g.delta)}
                 </div>
               </div>
             ))}
@@ -434,7 +397,7 @@ function ChartsPanel({ students, lastRound, currentRound }: {
         </div>
       )}
 
-      {/* Hawk vs Dove avg comparison — line-style bar */}
+      {/* Hawk vs Dove avg */}
       <div style={{ padding:16, background:'var(--bg-card)', border:'1px solid var(--border)', gridColumn:'1/-1' }}>
         <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:14 }}>HAWK vs DOVE — AVERAGE POINTS</div>
         <div style={{ display:'flex', gap:12, alignItems:'flex-end', height:80 }}>
@@ -446,14 +409,13 @@ function ChartsPanel({ students, lastRound, currentRound }: {
             const h = Math.round((bar.avg / maxAvg) * 70)
             return (
               <div key={bar.label} style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4, flex:1 }}>
-                <div style={{ fontSize:13, fontWeight:500, color:bar.color }}>{bar.avg} pts</div>
+                <div style={{ fontSize:13, fontWeight:500, color:bar.color }}>{fmt(bar.avg)} pts</div>
                 <div style={{ width:'100%', height:h, background:bar.bg, border:`1px solid ${bar.color}`, transition:'height 0.6s', minHeight:4 }} />
                 <div style={{ fontSize:11, color:'var(--text-mid)' }}>{bar.label}</div>
               </div>
             )
           })}
           <div style={{ flex:3 }} />
-          {/* Eliminated count */}
           <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
             <div style={{ fontSize:13, fontWeight:500, color:'var(--text-dim)' }}>{eliminated.length}</div>
             <div style={{ width:60, height:Math.max(Math.round((eliminated.length/Math.max(students.length,1))*70),4),

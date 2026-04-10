@@ -26,6 +26,11 @@ function setCookie(name: string, val: string) {
   document.cookie = `${name}=${encodeURIComponent(val)};max-age=${60*60*24*365};path=/;samesite=lax`
 }
 
+function fmt(n: number) {
+  const rounded = Math.round(n * 100) / 100
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2).replace(/\.?0+$/, '')
+}
+
 export default function PlayerPage() {
   const [game, setGame] = useState<GameInfo | null>(null)
   const [myId, setMyId] = useState('')
@@ -145,7 +150,7 @@ export default function PlayerPage() {
           </div>
           <div style={{ textAlign:'right' }}>
             <div className="label" style={{ marginBottom:3 }}>Balance</div>
-            <div style={{ fontSize:30, fontWeight:500, color:'var(--gold)', lineHeight:1 }}>{me.points}</div>
+            <div style={{ fontSize:30, fontWeight:500, color:'var(--gold)', lineHeight:1 }}>{fmt(me.points)}</div>
             <div style={{ fontSize:11, color:'var(--text-dim)', marginTop:2 }}>pts</div>
           </div>
         </div>
@@ -283,11 +288,11 @@ function ResultCard({ pairing, me, students }: { pairing: Pairing; me: StudentIn
       <div style={{ borderTop:'1px solid var(--border)', paddingTop:10 }}>
         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
           <span style={{ fontSize:13, color:'var(--text-mid)' }}>Change</span>
-          <span style={{ fontSize:20, fontWeight:500, color:dc }}>{myDelta>0?'+':''}{myDelta}</span>
+          <span style={{ fontSize:20, fontWeight:500, color:dc }}>{myDelta>0?'+':''}{fmt(myDelta)}</span>
         </div>
         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:10 }}>
           <span style={{ fontSize:13, color:'var(--text-mid)' }}>New balance</span>
-          <span style={{ fontSize:20, fontWeight:500, color:'var(--gold)' }}>{me.points}</span>
+          <span style={{ fontSize:20, fontWeight:500, color:'var(--gold)' }}>{fmt(me.points)}</span>
         </div>
         <div style={{ fontSize:11, color:'var(--text-dim)', lineHeight:1.5 }}>{pairing.note}</div>
       </div>

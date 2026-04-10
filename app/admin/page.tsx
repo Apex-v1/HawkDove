@@ -19,8 +19,13 @@ interface RoundRecord {
   computedAt: string; finalizedAt?: string
 }
 interface GameState {
-  week: number; currentRound: number; students: Student[]
+  week: number; currentRound: number; displayRound?: number; students: Student[]
   rounds: RoundRecord[]; roundOpen: boolean; pendingRound?: RoundRecord
+}
+
+function fmt(n: number) {
+  const rounded = Math.round(n * 100) / 100
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2).replace(/\.?0+$/, '')
 }
 
 export default function AdminPage() {
@@ -38,6 +43,7 @@ export default function AdminPage() {
   const [editDeltas, setEditDeltas] = useState<Record<string,{a:string,b:string}>>({})
   const [uploading, setUploading] = useState(false)
   const [uploadMsg, setUploadMsg] = useState('')
+  const [displayRoundInput, setDisplayRoundInput] = useState('')
 
   const fetchState = useCallback(async () => {
     const res = await fetch('/api/admin/control', { cache: 'no-store' })
@@ -52,6 +58,13 @@ export default function AdminPage() {
     const iv = setInterval(fetchState, 4000)
     return () => clearInterval(iv)
   }, [authed, fetchState])
+
+  // Sync display round input when state loads
+  useEffect(() => {
+    if (state && displayRoundInput === '') {
+      setDisplayRoundInput(String(state.displayRound ?? state.currentRound))
+    }
+  }, [state])
 
   async function login() {
     const res = await fetch('/api/admin/auth', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ password: pw }) })
@@ -138,7 +151,7 @@ export default function AdminPage() {
           <span style={{ color:'var(--text-dim)', fontSize:12, marginLeft:10 }}>Admin</span>
         </div>
         <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-          {[['Week', state.week], ['Round', state.currentRound], ['Active', active.length], [`${submitted}/${active.length}`, 'submitted']].map(([v,l]) => (
+          {([['Week', state.week], ['Round', state.currentRound], ['Active', active.length], [`${submitted}/${active.length}`, 'submitted']] as [string|number, string|number][]).map(([v,l]) => (
             <div key={String(l)} style={{ display:'flex', gap:5, alignItems:'center', padding:'3px 9px', background:'var(--bg-card)', border:'1px solid var(--border)', fontSize:12 }}>
               <span style={{ color:'var(--text-dim)', fontSize:10 }}>{l}</span>
               <span style={{ color:'var(--gold)', fontWeight:500 }}>{v}</span>
@@ -147,7 +160,7 @@ export default function AdminPage() {
           {state.roundOpen && <span className="tag tag-dove pulse">● OPEN</span>}
           {state.pendingRound && <span className="tag tag-gold">⏳ REVIEW</span>}
           <a href="/display" target="_blank" style={{ fontSize:10, color:'var(--dove)', textDecoration:'none', padding:'4px 9px', border:'1px solid var(--dove-bg)', display:'flex', alignItems:'center' }}>📊 Display</a>
-          <button className="btn btn-danger" style={{ fontSize:10, padding:'4px 9px' }} onClick={() => { if (confirm('Reset?')) act('reset') }}>Reset</button>
+          <button className="btn btn-danger" style={{ fontSize:10, padding:'4px 9px' }} onClick={() => { if (confirm('Reset everything?')) act('reset') }}>Reset</button>
         </div>
       </div>
 
@@ -177,6 +190,17 @@ export default function AdminPage() {
             ✓ Finalize & Push
           </button>
         )}
+        <div style={{ width:1, height:20, background:'var(--border)', margin:'0 4px' }} />
+        {/* Display round override */}
+        <span className="label" style={{ fontSize:10 }}>Display Round:</span>
+        <input type="number" className="input" style={{ width:60, padding:'4px 8px', fontSize:12 }}
+          value={displayRoundInput}
+          onChange={e => setDisplayRoundInput(e.target.value)} />
+        <button className="btn btn-ghost" style={{ padding:'5px 10px', fontSize:11 }}
+          onClick={() => act('set_display_round', { round: parseInt(displayRoundInput) || 0 })}>
+          Set
+        </button>
+        <span style={{ fontSize:10, color:'var(--text-dim)' }}>(shown to students on display)</span>
       </div>
 
       {/* Tabs */}
@@ -313,7 +337,7 @@ export default function AdminPage() {
                         <td style={{ padding:'5px 8px', color:'var(--text)' }}>{s.name}</td>
                         <td style={{ padding:'5px 8px', color:'var(--text-dim)', fontSize:11 }}>{s.email}</td>
                         <td style={{ padding:'5px 8px', color:'var(--text-mid)', textAlign:'center' }}>{s.tiebreaker}</td>
-                        <td style={{ padding:'5px 8px', color:'var(--gold)', fontWeight:500 }}>{s.points}</td>
+                        <td style={{ padding:'5px 8px', color:'var(--gold)', fontWeight:500 }}>{fmt(s.points)}</td>
                         <td style={{ padding:'5px 8px' }}>{s.choice ? <span className={`tag tag-${s.choice}`} style={{ fontSize:10 }}>{s.choice[0].toUpperCase()}</span> : <span style={{ color:'var(--text-dim)' }}>—</span>}</td>
                         <td style={{ padding:'5px 8px' }}>{s.staplePartnerId ? <span className="tag tag-staple" style={{ fontSize:10 }}>{s.isHawkInStaple?'🦅':'🕊️'}</span> : '—'}</td>
                         <td style={{ padding:'5px 8px' }}>{s.isEliminated ? '💀' : '—'}</td>
@@ -368,27 +392,27 @@ export default function AdminPage() {
                           <td style={{ padding:'5px 7px' }}><span style={{ color:tc, fontWeight:700, fontSize:11 }}>{p.type}</span></td>
                           <td style={{ padding:'5px 7px', color:'var(--text)' }}>{a?.name.split(',')[0]??'?'}</td>
                           <td style={{ padding:'5px 7px' }}><span className={`tag tag-${p.aChoice}`} style={{ fontSize:10 }}>{p.aChoice[0].toUpperCase()}</span></td>
-                          <td style={{ padding:'5px 7px', color:'var(--text-dim)' }}>{state.pendingRound!.snapshotBefore[a?.name??'']??'?'}</td>
+                          <td style={{ padding:'5px 7px', color:'var(--text-dim)' }}>{fmt(state.pendingRound!.snapshotBefore[a?.name??'']??0)}</td>
                           <td style={{ padding:'5px 7px' }}>
                             {isEdit
                               ? <input type="number" style={{ width:65, padding:'2px 5px', background:'var(--bg)', border:'1px solid var(--gold)', color:'var(--gold)', fontFamily:'inherit', fontSize:11 }}
                                   value={editDeltas[p.pairingId]?.a??p.aDelta}
                                   onChange={e=>setEditDeltas(prev=>({...prev,[p.pairingId]:{...prev[p.pairingId],a:e.target.value}}))} />
                               : <span style={{ color:p.aDelta>0?'var(--green)':p.aDelta<0?'var(--hawk)':'var(--text-dim)', fontWeight:500 }}>
-                                  {p.aDelta>0?'+':''}{p.aDelta} → <span style={{ color:'var(--gold)' }}>{aAfter}</span>
+                                  {p.aDelta>0?'+':''}{fmt(p.aDelta)} → <span style={{ color:'var(--gold)' }}>{fmt(aAfter??0)}</span>
                                 </span>
                             }
                           </td>
                           <td style={{ padding:'5px 7px', color:'var(--text)' }}>{isSit?'(sits out)':b?.name.split(',')[0]??'?'}</td>
                           <td style={{ padding:'5px 7px' }}>{!isSit&&<span className={`tag tag-${p.bChoice}`} style={{ fontSize:10 }}>{p.bChoice[0].toUpperCase()}</span>}</td>
-                          <td style={{ padding:'5px 7px', color:'var(--text-dim)' }}>{!isSit&&(state.pendingRound!.snapshotBefore[b?.name??'']??'?')}</td>
+                          <td style={{ padding:'5px 7px', color:'var(--text-dim)' }}>{!isSit&&fmt(state.pendingRound!.snapshotBefore[b?.name??'']??0)}</td>
                           <td style={{ padding:'5px 7px' }}>
                             {!isSit&&(isEdit
                               ? <input type="number" style={{ width:65, padding:'2px 5px', background:'var(--bg)', border:'1px solid var(--gold)', color:'var(--gold)', fontFamily:'inherit', fontSize:11 }}
                                   value={editDeltas[p.pairingId]?.b??p.bDelta}
                                   onChange={e=>setEditDeltas(prev=>({...prev,[p.pairingId]:{...prev[p.pairingId],b:e.target.value}}))} />
                               : <span style={{ color:p.bDelta>0?'var(--green)':p.bDelta<0?'var(--hawk)':'var(--text-dim)', fontWeight:500 }}>
-                                  {p.bDelta>0?'+':''}{p.bDelta} → <span style={{ color:'var(--gold)' }}>{bAfter}</span>
+                                  {p.bDelta>0?'+':''}{fmt(p.bDelta)} → <span style={{ color:'var(--gold)' }}>{fmt(bAfter??0)}</span>
                                 </span>
                             )}
                           </td>
@@ -453,14 +477,14 @@ export default function AdminPage() {
                             <td style={{ padding:'4px 6px' }}><span style={{ color:tc, fontWeight:700 }}>{p.type}</span></td>
                             <td style={{ padding:'4px 6px', color:'var(--text)' }}>{a?.name??'?'}</td>
                             <td style={{ padding:'4px 6px' }}><span className={`tag tag-${p.aChoice}`} style={{ fontSize:9 }}>{p.aChoice[0].toUpperCase()}</span></td>
-                            <td style={{ padding:'4px 6px', color:'var(--text-dim)' }}>{r.snapshotBefore[a?.name??'']??0}</td>
-                            <td style={{ padding:'4px 6px', color:p.aDelta>0?'var(--green)':p.aDelta<0?'var(--hawk)':'var(--text-dim)', fontWeight:500 }}>{p.aDelta>0?'+':''}{p.aDelta}</td>
-                            <td style={{ padding:'4px 6px', color:'var(--gold)' }}>{r.snapshotAfter[a?.name??'']??0}</td>
+                            <td style={{ padding:'4px 6px', color:'var(--text-dim)' }}>{fmt(r.snapshotBefore[a?.name??'']??0)}</td>
+                            <td style={{ padding:'4px 6px', color:p.aDelta>0?'var(--green)':p.aDelta<0?'var(--hawk)':'var(--text-dim)', fontWeight:500 }}>{p.aDelta>0?'+':''}{fmt(p.aDelta)}</td>
+                            <td style={{ padding:'4px 6px', color:'var(--gold)' }}>{fmt(r.snapshotAfter[a?.name??'']??0)}</td>
                             <td style={{ padding:'4px 6px', color:'var(--text)' }}>{isSit?'(sits out)':b?.name??'?'}</td>
                             <td style={{ padding:'4px 6px' }}>{!isSit&&<span className={`tag tag-${p.bChoice}`} style={{ fontSize:9 }}>{p.bChoice[0].toUpperCase()}</span>}</td>
-                            <td style={{ padding:'4px 6px', color:'var(--text-dim)' }}>{!isSit&&(r.snapshotBefore[b?.name??'']??0)}</td>
-                            <td style={{ padding:'4px 6px', color:p.bDelta>0?'var(--green)':p.bDelta<0?'var(--hawk)':'var(--text-dim)', fontWeight:500 }}>{!isSit&&<>{p.bDelta>0?'+':''}{p.bDelta}</>}</td>
-                            <td style={{ padding:'4px 6px', color:'var(--gold)' }}>{!isSit&&(r.snapshotAfter[b?.name??'']??0)}</td>
+                            <td style={{ padding:'4px 6px', color:'var(--text-dim)' }}>{!isSit&&fmt(r.snapshotBefore[b?.name??'']??0)}</td>
+                            <td style={{ padding:'4px 6px', color:p.bDelta>0?'var(--green)':p.bDelta<0?'var(--hawk)':'var(--text-dim)', fontWeight:500 }}>{!isSit&&<>{p.bDelta>0?'+':''}{fmt(p.bDelta)}</>}</td>
+                            <td style={{ padding:'4px 6px', color:'var(--gold)' }}>{!isSit&&fmt(r.snapshotAfter[b?.name??'']??0)}</td>
                             <td style={{ padding:'4px 6px', color:'var(--text-dim)', fontSize:10, maxWidth:200 }}>{p.note}</td>
                           </tr>
                         )
@@ -501,7 +525,7 @@ function InsightsPanel({ students, rounds }: { students: Student[]; rounds: Roun
 
   const quotes = [
     `${doveUnder400}% of doves hold fewer than 400 points.`,
-    `Hawks average ${hawkAvg} pts vs doves at ${doveAvg} pts.`,
+    `Hawks average ${fmt(hawkAvg)} pts vs doves at ${fmt(doveAvg)} pts.`,
     `${hawkOver500}% of hawks hold over 500 points.`,
     `Top 20% of players control ${top20share}% of all points in play.`,
   ]
@@ -545,7 +569,7 @@ function InsightsPanel({ students, rounds }: { students: Student[]; rounds: Roun
                   background: s.choice==='hawk'?'var(--hawk-bg)':s.choice==='dove'?'var(--dove-bg)':'var(--bg-raised)',
                   borderRight:`2px solid ${s.choice==='hawk'?'var(--hawk)':s.choice==='dove'?'var(--dove)':'var(--border-hi)'}` }} />
               </div>
-              <div style={{ width:55, textAlign:'right', fontSize:11, color:'var(--gold)', fontWeight:500 }}>{s.points}</div>
+              <div style={{ width:55, textAlign:'right', fontSize:11, color:'var(--gold)', fontWeight:500 }}>{fmt(s.points)}</div>
               <div style={{ width:16, textAlign:'center', fontSize:10, color:'var(--text-dim)' }}>{s.tiebreaker}</div>
             </div>
           ))}
@@ -556,11 +580,11 @@ function InsightsPanel({ students, rounds }: { students: Student[]; rounds: Roun
         <div className="label" style={{ marginBottom:10 }}>Key stats</div>
         {[
           ['Active players', active.length],
-          ['Total pts in play', total],
-          ['Average pts', avg],
+          ['Total pts in play', fmt(total)],
+          ['Average pts', fmt(avg)],
           ['Protectorates', `${stapledCount} players (${stapledCount/2|0} pairs)`],
-          ['Richest', `${sorted[0]?.name.split(',')[0]??'—'} (${sorted[0]?.points??0})`],
-          ['Least pts', `${sorted[sorted.length-1]?.name.split(',')[0]??'—'} (${sorted[sorted.length-1]?.points??0})`],
+          ['Richest', `${sorted[0]?.name.split(',')[0]??'—'} (${fmt(sorted[0]?.points??0)})`],
+          ['Least pts', `${sorted[sorted.length-1]?.name.split(',')[0]??'—'} (${fmt(sorted[sorted.length-1]?.points??0)})`],
           ['Rounds played', rounds.length],
         ].map(([l,v]) => (
           <div key={String(l)} style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', borderBottom:'1px solid var(--border)', fontSize:12 }}>
