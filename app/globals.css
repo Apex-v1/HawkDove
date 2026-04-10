@@ -1,0 +1,274 @@
+/* app/globals.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #080a0e;
+  --bg-card: #0d1117;
+  --bg-elevated: #131920;
+  --border: #1e2832;
+  --border-bright: #2a3a4a;
+
+  --hawk: #e8372a;
+  --hawk-dim: #6b1a14;
+  --hawk-glow: rgba(232, 55, 42, 0.15);
+
+  --dove: #3a9eff;
+  --dove-dim: #1a3d6b;
+  --dove-glow: rgba(58, 158, 255, 0.15);
+
+  --gold: #f0b429;
+  --gold-dim: #6b4e12;
+
+  --text-primary: #e8edf2;
+  --text-secondary: #6b7a8d;
+  --text-dim: #3a4858;
+
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-mono: 'Space Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-display), system-ui, sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Scanline overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Noise grain */
+body::after {
+  content: '';
+  position: fixed;
+  inset: -50%;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  opacity: 0.025;
+  pointer-events: none;
+  z-index: 9998;
+  animation: grain 0.5s steps(1) infinite;
+}
+
+@keyframes grain {
+  0%, 100% { transform: translate(0, 0); }
+  10% { transform: translate(-1%, -1%); }
+  20% { transform: translate(1%, 0%); }
+  30% { transform: translate(0%, 1%); }
+  40% { transform: translate(-1%, 0%); }
+  50% { transform: translate(1%, 1%); }
+  60% { transform: translate(0%, -1%); }
+  70% { transform: translate(-1%, 1%); }
+  80% { transform: translate(1%, -1%); }
+  90% { transform: translate(0%, 1%); }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+
+/* Utilities */
+.font-mono { font-family: var(--font-mono), monospace; }
+
+.hawk-text { color: var(--hawk); }
+.dove-text { color: var(--dove); }
+.gold-text { color: var(--gold); }
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+
+.card-elevated {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-bright);
+  border-radius: 2px;
+}
+
+.btn-hawk {
+  background: var(--hawk-dim);
+  border: 1px solid var(--hawk);
+  color: var(--hawk);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+  padding: 12px 32px;
+  font-size: 13px;
+}
+
+.btn-hawk:hover {
+  background: var(--hawk);
+  color: #fff;
+  box-shadow: 0 0 24px var(--hawk-glow), 0 0 0 1px var(--hawk);
+}
+
+.btn-hawk.selected {
+  background: var(--hawk);
+  color: #fff;
+  box-shadow: 0 0 32px rgba(232, 55, 42, 0.4), inset 0 0 16px rgba(255,255,255,0.1);
+}
+
+.btn-dove {
+  background: var(--dove-dim);
+  border: 1px solid var(--dove);
+  color: var(--dove);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+  padding: 12px 32px;
+  font-size: 13px;
+}
+
+.btn-dove:hover {
+  background: var(--dove);
+  color: #fff;
+  box-shadow: 0 0 24px var(--dove-glow), 0 0 0 1px var(--dove);
+}
+
+.btn-dove.selected {
+  background: var(--dove);
+  color: #fff;
+  box-shadow: 0 0 32px rgba(58, 158, 255, 0.4), inset 0 0 16px rgba(255,255,255,0.1);
+}
+
+.btn-primary {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-bright);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+  padding: 10px 24px;
+  font-size: 12px;
+}
+
+.btn-primary:hover {
+  border-color: var(--text-secondary);
+  color: #fff;
+}
+
+.btn-danger {
+  background: transparent;
+  border: 1px solid var(--hawk-dim);
+  color: var(--hawk);
+  font-family: var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+  padding: 8px 20px;
+  font-size: 11px;
+}
+
+.btn-danger:hover {
+  background: var(--hawk-dim);
+}
+
+.input-field {
+  background: var(--bg);
+  border: 1px solid var(--border-bright);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 10px 14px;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.15s;
+  border-radius: 2px;
+}
+
+.input-field:focus {
+  border-color: var(--dove);
+  box-shadow: 0 0 0 1px var(--dove-dim);
+}
+
+.input-field::placeholder {
+  color: var(--text-dim);
+}
+
+/* Ticker / live feed */
+@keyframes ticker {
+  from { transform: translateX(100vw); }
+  to { transform: translateX(-100%); }
+}
+
+.ticker-text {
+  animation: ticker 25s linear infinite;
+  white-space: nowrap;
+}
+
+/* Pulse animation for waiting */
+@keyframes pulse-ring {
+  0% { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(2); opacity: 0; }
+}
+
+.pulse-ring::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  animation: pulse-ring 1.5s ease-out infinite;
+}
+
+/* Blink for submitted status */
+@keyframes blink-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
+.blink { animation: blink-dot 1s ease infinite; }
+
+/* Reveal animation */
+@keyframes slide-up {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.slide-up {
+  animation: slide-up 0.4s ease forwards;
+}
+
+@keyframes flash-green {
+  0% { background: rgba(0,255,100,0.15); }
+  100% { background: transparent; }
+}
+@keyframes flash-red {
+  0% { background: rgba(255,50,50,0.15); }
+  100% { background: transparent; }
+}
+
+.flash-gain { animation: flash-green 1.2s ease forwards; }
+.flash-loss { animation: flash-red 1.2s ease forwards; }
