@@ -83,7 +83,7 @@ export default function PlayerPage() {
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
       <div style={{ width:'100%', maxWidth:420 }}>
         <div style={{ textAlign:'center', marginBottom:28 }}>
-          <div className="label" style={{ marginBottom:8 }}>Social Redistribution Game</div>
+          <div className="label" style={{ marginBottom:8 }}>Jesse Driscoll's</div>
           <div style={{ fontSize:34, fontWeight:500, letterSpacing:'-0.02em' }}>
             <span style={{ color:'var(--hawk)' }}>HAWK</span>
             <span style={{ color:'var(--text-dim)', margin:'0 8px' }}>/</span>
