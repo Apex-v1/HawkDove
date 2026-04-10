@@ -28,6 +28,30 @@ function fmt(n: number) {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2).replace(/\.?0+$/, '')
 }
 
+function downloadCSV(students: Student[], rounds: RoundRecord[]) {
+  const sorted = [...students].sort((a, b) => b.points - a.points)
+  const headers = ['Rank', 'Name', 'Email', 'Points', 'Tiebreaker', 'Choice', 'Stapled', 'Hawk In Staple', 'Eliminated']
+  const rows = sorted.map((s, i) => [
+    i + 1,
+    `"${s.name}"`,
+    `"${s.email}"`,
+    fmt(s.points),
+    s.tiebreaker,
+    s.choice || '',
+    s.staplePartnerId ? 'Yes' : 'No',
+    s.isHawkInStaple ? 'Hawk' : s.staplePartnerId ? 'Dove' : '',
+    s.isEliminated ? 'Yes' : 'No',
+  ])
+  const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `hawk-dove-round${rounds.length}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function AdminPage() {
   const [authed, setAuthed] = useState(false)
   const [pw, setPw] = useState('')
@@ -59,7 +83,6 @@ export default function AdminPage() {
     return () => clearInterval(iv)
   }, [authed, fetchState])
 
-  // Sync display round input when state loads
   useEffect(() => {
     if (state && displayRoundInput === '') {
       setDisplayRoundInput(String(state.displayRound ?? state.currentRound))
@@ -93,7 +116,7 @@ export default function AdminPage() {
 
   function startEdit(s: Student) {
     setEditingId(s.id)
-    setEditFields({ name: s.name, email: s.email, points: String(s.points), tiebreaker: String(s.tiebreaker) })
+    setEditFields({ name: s.name, email: s.email, points: String(s.points), tiebreaker: String(s.tiebreaker), choice: s.choice || '' })
   }
 
   async function saveEdit(id: string) {
@@ -104,6 +127,9 @@ export default function AdminPage() {
       points: parseFloat(editFields.points) || 0,
       tiebreaker: parseFloat(editFields.tiebreaker) || 0,
     })
+    if (editFields.choice !== undefined) {
+      await act('override_choice', { id, choice: editFields.choice || null })
+    }
     setEditingId(null)
   }
 
@@ -160,6 +186,8 @@ export default function AdminPage() {
           {state.roundOpen && <span className="tag tag-dove pulse">● OPEN</span>}
           {state.pendingRound && <span className="tag tag-gold">⏳ REVIEW</span>}
           <a href="/display" target="_blank" style={{ fontSize:10, color:'var(--dove)', textDecoration:'none', padding:'4px 9px', border:'1px solid var(--dove-bg)', display:'flex', alignItems:'center' }}>📊 Display</a>
+          <button className="btn btn-ghost" style={{ fontSize:10, padding:'4px 9px' }}
+            onClick={() => downloadCSV(state.students, state.rounds)}>⬇ Export CSV</button>
           <button className="btn btn-danger" style={{ fontSize:10, padding:'4px 9px' }} onClick={() => { if (confirm('Reset everything?')) act('reset') }}>Reset</button>
         </div>
       </div>
@@ -184,23 +212,24 @@ export default function AdminPage() {
             ⚡ Compute
           </button>
         </>}
-        {state.pendingRound && (
+        {state.pendingRound && <>
+          <button className="btn btn-ghost" style={{ padding:'7px 14px', fontSize:12 }}
+            onClick={async () => { await act('rerandomize'); setTab('round') }} disabled={!!loading}
+            title="Reshuffle pairings with a new random seed">
+            🔀 Re-randomize
+          </button>
           <button className="btn btn-hawk" style={{ padding:'7px 14px', fontSize:12 }}
             onClick={async () => { await act('finalize_round'); setTab('history') }} disabled={!!loading}>
             ✓ Finalize & Push
           </button>
-        )}
+        </>}
         <div style={{ width:1, height:20, background:'var(--border)', margin:'0 4px' }} />
-        {/* Display round override */}
         <span className="label" style={{ fontSize:10 }}>Display Round:</span>
         <input type="number" className="input" style={{ width:60, padding:'4px 8px', fontSize:12 }}
-          value={displayRoundInput}
-          onChange={e => setDisplayRoundInput(e.target.value)} />
+          value={displayRoundInput} onChange={e => setDisplayRoundInput(e.target.value)} />
         <button className="btn btn-ghost" style={{ padding:'5px 10px', fontSize:11 }}
-          onClick={() => act('set_display_round', { round: parseInt(displayRoundInput) || 0 })}>
-          Set
-        </button>
-        <span style={{ fontSize:10, color:'var(--text-dim)' }}>(shown to students on display)</span>
+          onClick={() => act('set_display_round', { round: parseInt(displayRoundInput) || 0 })}>Set</button>
+        <span style={{ fontSize:10, color:'var(--text-dim)' }}>(shown on display)</span>
       </div>
 
       {/* Tabs */}
@@ -300,13 +329,13 @@ export default function AdminPage() {
           <div className="card" style={{ padding:14 }}>
             <div style={{ display:'flex', justifyContent:'space-between', marginBottom:10 }}>
               <div className="label">{state.students.length} Students</div>
-              <div style={{ fontSize:11, color:'var(--text-dim)' }}>Click any row to edit</div>
+              <div style={{ fontSize:11, color:'var(--text-dim)' }}>Click any row to edit · Click 💀 to toggle eliminated</div>
             </div>
             <div style={{ overflowX:'auto', maxHeight:600, overflowY:'auto' }}>
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                 <thead style={{ position:'sticky', top:0, background:'var(--bg-card)' }}>
                   <tr style={{ borderBottom:'1px solid var(--border)' }}>
-                    {['#','Name','Email','Tiebreaker','Points','Choice','Stapled','Elim',''].map(h => (
+                    {['#','Name','Email','TB','Points','Choice','Stapled','Elim',''].map(h => (
                       <th key={h} style={{ padding:'5px 8px', textAlign:'left', color:'var(--text-dim)', fontWeight:400, fontSize:10, letterSpacing:'0.12em', whiteSpace:'nowrap' }}>{h}</th>
                     ))}
                   </tr>
@@ -318,9 +347,17 @@ export default function AdminPage() {
                         <td style={{ padding:'5px 8px', color:'var(--text-dim)' }}>{i+1}</td>
                         <td style={{ padding:'4px 6px' }}><input className="input" style={{ padding:'3px 7px', fontSize:11 }} value={editFields.name} onChange={e=>setEditFields(p=>({...p,name:e.target.value}))} /></td>
                         <td style={{ padding:'4px 6px' }}><input className="input" style={{ padding:'3px 7px', fontSize:11 }} value={editFields.email} onChange={e=>setEditFields(p=>({...p,email:e.target.value}))} /></td>
-                        <td style={{ padding:'4px 6px' }}><input type="number" className="input" style={{ padding:'3px 7px', fontSize:11, width:60 }} value={editFields.tiebreaker} onChange={e=>setEditFields(p=>({...p,tiebreaker:e.target.value}))} /></td>
+                        <td style={{ padding:'4px 6px' }}><input type="number" className="input" style={{ padding:'3px 7px', fontSize:11, width:50 }} value={editFields.tiebreaker} onChange={e=>setEditFields(p=>({...p,tiebreaker:e.target.value}))} /></td>
                         <td style={{ padding:'4px 6px' }}><input type="number" className="input" style={{ padding:'3px 7px', fontSize:11, width:80 }} value={editFields.points} onChange={e=>setEditFields(p=>({...p,points:e.target.value}))} /></td>
-                        <td colSpan={3} />
+                        <td style={{ padding:'4px 6px' }}>
+                          <select className="input" style={{ padding:'3px 6px', fontSize:11 }}
+                            value={editFields.choice} onChange={e=>setEditFields(p=>({...p,choice:e.target.value}))}>
+                            <option value="">— none —</option>
+                            <option value="hawk">🦅 Hawk</option>
+                            <option value="dove">🕊️ Dove</option>
+                          </select>
+                        </td>
+                        <td colSpan={2} />
                         <td style={{ padding:'4px 6px' }}>
                           <div style={{ display:'flex', gap:4 }}>
                             <button className="btn btn-gold" style={{ padding:'3px 8px', fontSize:10 }} onClick={() => saveEdit(s.id)}>Save</button>
@@ -329,19 +366,24 @@ export default function AdminPage() {
                         </td>
                       </tr>
                     ) : (
-                      <tr key={s.id} style={{ borderBottom:'1px solid var(--border)', opacity:s.isEliminated?0.4:1, cursor:'pointer' }}
-                        onClick={() => startEdit(s)}
-                        onMouseEnter={e=>(e.currentTarget.style.background='var(--bg-raised)')}
-                        onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
+                      <tr key={s.id} style={{ borderBottom:'1px solid var(--border)', opacity:s.isEliminated?0.4:1 }}>
                         <td style={{ padding:'5px 8px', color:i===0?'var(--gold)':'var(--text-dim)', fontSize:11 }}>{i===0?'★':i+1}</td>
-                        <td style={{ padding:'5px 8px', color:'var(--text)' }}>{s.name}</td>
-                        <td style={{ padding:'5px 8px', color:'var(--text-dim)', fontSize:11 }}>{s.email}</td>
-                        <td style={{ padding:'5px 8px', color:'var(--text-mid)', textAlign:'center' }}>{s.tiebreaker}</td>
-                        <td style={{ padding:'5px 8px', color:'var(--gold)', fontWeight:500 }}>{fmt(s.points)}</td>
-                        <td style={{ padding:'5px 8px' }}>{s.choice ? <span className={`tag tag-${s.choice}`} style={{ fontSize:10 }}>{s.choice[0].toUpperCase()}</span> : <span style={{ color:'var(--text-dim)' }}>—</span>}</td>
+                        <td style={{ padding:'5px 8px', color:'var(--text)', cursor:'pointer' }} onClick={() => startEdit(s)}>{s.name}</td>
+                        <td style={{ padding:'5px 8px', color:'var(--text-dim)', fontSize:11, cursor:'pointer' }} onClick={() => startEdit(s)}>{s.email}</td>
+                        <td style={{ padding:'5px 8px', color:'var(--text-mid)', textAlign:'center', cursor:'pointer' }} onClick={() => startEdit(s)}>{s.tiebreaker}</td>
+                        <td style={{ padding:'5px 8px', color:'var(--gold)', fontWeight:500, cursor:'pointer' }} onClick={() => startEdit(s)}>{fmt(s.points)}</td>
+                        <td style={{ padding:'5px 8px', cursor:'pointer' }} onClick={() => startEdit(s)}>
+                          {s.choice ? <span className={`tag tag-${s.choice}`} style={{ fontSize:10 }}>{s.choice[0].toUpperCase()}</span> : <span style={{ color:'var(--text-dim)' }}>—</span>}
+                        </td>
                         <td style={{ padding:'5px 8px' }}>{s.staplePartnerId ? <span className="tag tag-staple" style={{ fontSize:10 }}>{s.isHawkInStaple?'🦅':'🕊️'}</span> : '—'}</td>
-                        <td style={{ padding:'5px 8px' }}>{s.isEliminated ? '💀' : '—'}</td>
-                        <td style={{ padding:'5px 8px' }}><span style={{ fontSize:10, color:'var(--text-dim)' }}>edit</span></td>
+                        <td style={{ padding:'5px 8px' }}>
+                          <button onClick={() => act('toggle_eliminated', { id: s.id })}
+                            style={{ background:'transparent', border:'none', cursor:'pointer', fontSize:14, padding:'0 2px' }}
+                            title="Toggle eliminated">
+                            {s.isEliminated ? '💀' : <span style={{ color:'var(--text-dim)', fontSize:11 }}>—</span>}
+                          </button>
+                        </td>
+                        <td style={{ padding:'5px 8px' }}><span style={{ fontSize:10, color:'var(--text-dim)', cursor:'pointer' }} onClick={() => startEdit(s)}>edit</span></td>
                       </tr>
                     )
                   ))}
@@ -363,10 +405,17 @@ export default function AdminPage() {
                   <div className="label">Round {state.pendingRound.round} — Pending Review</div>
                   <div style={{ fontSize:11, color:'var(--text-dim)', marginTop:2 }}>Computed {new Date(state.pendingRound.computedAt).toLocaleTimeString()}. Edit deltas if needed, then finalize.</div>
                 </div>
-                <button className="btn btn-hawk" style={{ padding:'9px 18px' }}
-                  onClick={async () => { await act('finalize_round'); setTab('history') }}>
-                  ✓ Finalize & Push Results
-                </button>
+                <div style={{ display:'flex', gap:8 }}>
+                  <button className="btn btn-ghost" style={{ padding:'7px 14px', fontSize:12 }}
+                    onClick={async () => { await act('rerandomize') }} disabled={!!loading}
+                    title="Reshuffle all pairings with a new random seed">
+                    🔀 Re-randomize
+                  </button>
+                  <button className="btn btn-hawk" style={{ padding:'9px 18px' }}
+                    onClick={async () => { await act('finalize_round'); setTab('history') }}>
+                    ✓ Finalize & Push Results
+                  </button>
+                </div>
               </div>
               <div style={{ overflowX:'auto' }}>
                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
@@ -538,7 +587,6 @@ function InsightsPanel({ students, rounds }: { students: Student[]; rounds: Roun
           <div style={{ fontSize:15, color:'var(--gold)', lineHeight:1.5 }}>"{q}"</div>
         </div>
       ))}
-
       <div className="card" style={{ padding:14, gridColumn:'1/-1' }}>
         <div className="label" style={{ marginBottom:10 }}>Choice split (current round)</div>
         <div style={{ display:'flex', gap:5, alignItems:'center', height:28 }}>
@@ -554,7 +602,6 @@ function InsightsPanel({ students, rounds }: { students: Student[]; rounds: Roun
           ))}
         </div>
       </div>
-
       <div className="card" style={{ padding:14, gridColumn:'1/-1' }}>
         <div className="label" style={{ marginBottom:10 }}>Points — all players</div>
         <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
@@ -575,7 +622,6 @@ function InsightsPanel({ students, rounds }: { students: Student[]; rounds: Roun
           ))}
         </div>
       </div>
-
       <div className="card" style={{ padding:14 }}>
         <div className="label" style={{ marginBottom:10 }}>Key stats</div>
         {[
@@ -593,7 +639,6 @@ function InsightsPanel({ students, rounds }: { students: Student[]; rounds: Roun
           </div>
         ))}
       </div>
-
       {rounds.length > 0 && (
         <div className="card" style={{ padding:14 }}>
           <div className="label" style={{ marginBottom:10 }}>Round breakdown</div>
