@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { checkAdmin, getState, loadRoster, setStaple, removeStaple, setStapleTransfer, updateStudent, openRound, closeRound, computeRound, finalizeRound, resetState } from '@/lib/store'
+import { checkAdmin, getState, loadRoster, setStaple, removeStaple, setStapleTransfer, updateStudent, openRound, closeRound, computeRound, finalizeRound, resetState, setDisplayRound } from '@/lib/store'
 export const dynamic = 'force-dynamic'
 
 async function auth(req: NextRequest) {
   return await checkAdmin(req.cookies.get('hd_admin')?.value || '')
+}
+
+async function kvSave(s: Awaited<ReturnType<typeof getState>>) {
+  try {
+    const { Redis } = await import('@upstash/redis')
+    const r = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL!, token: process.env.UPSTASH_REDIS_REST_TOKEN! })
+    await r.set('hd_game_state_v3', s)
+  } catch(e) { console.error('REDIS SAVE FAILED:', e) }
 }
 
 export async function GET(req: NextRequest) {
@@ -24,13 +32,40 @@ export async function POST(req: NextRequest) {
         await updateStudent(payload.id, { name: payload.name, email: payload.email, points: payload.points, tiebreaker: payload.tiebreaker })
         return NextResponse.json({ ok:true, state: await getState() })
       }
+      case 'override_choice': {
+        const s = await getState()
+        const st = s.students.find(x => x.id === payload.id)
+        if (st) {
+          st.choice = payload.choice || undefined
+          st.hasChosen = !!payload.choice
+          await kvSave(s)
+        }
+        return NextResponse.json({ ok:true, state: await getState() })
+      }
+      case 'toggle_eliminated': {
+        const s = await getState()
+        const st = s.students.find(x => x.id === payload.id)
+        if (st) {
+          st.isEliminated = !st.isEliminated
+          await kvSave(s)
+        }
+        return NextResponse.json({ ok:true, state: await getState() })
+      }
+      case 'rerandomize': {
+        const record = await computeRound()
+        return NextResponse.json({ ok:true, record, state: await getState() })
+      }
       case 'set_week': {
         const s = await getState(); s.week = payload.week
-        try { const { Redis } = await import('@upstash/redis'); const r = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL!, token: process.env.UPSTASH_REDIS_REST_TOKEN! }); await r.set('hd_game_state_v3', s) } catch {}
-        return NextResponse.json({ ok:true })
+        await kvSave(s)
+        return NextResponse.json({ ok:true, state: await getState() })
+      }
+      case 'set_display_round': {
+        await setDisplayRound(payload.round)
+        return NextResponse.json({ ok:true, state: await getState() })
       }
       case 'open_round': { await openRound(); return NextResponse.json({ ok:true, state: await getState() }) }
-      case 'close_round': { await closeRound(); return NextResponse.json({ ok:true }) }
+      case 'close_round': { await closeRound(); return NextResponse.json({ ok:true, state: await getState() }) }
       case 'compute_round': { const record = await computeRound(); return NextResponse.json({ ok:true, record, state: await getState() }) }
       case 'finalize_round': { const record = await finalizeRound(); return NextResponse.json({ ok:true, record, state: await getState() }) }
       case 'update_points': {
@@ -49,7 +84,7 @@ export async function POST(req: NextRequest) {
               fresh[b.name] = Math.round(((s.pendingRound!.snapshotBefore[b.name]||0) + pair.bDelta)*100)/100
             })
             s.pendingRound.snapshotAfter = fresh
-            try { const { Redis } = await import('@upstash/redis'); const r = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL!, token: process.env.UPSTASH_REDIS_REST_TOKEN! }); await r.set('hd_game_state_v3', s) } catch {}
+            await kvSave(s)
           }
         }
         return NextResponse.json({ ok:true, state: await getState() })
