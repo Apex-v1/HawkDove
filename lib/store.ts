@@ -36,7 +36,7 @@ export interface RoundRecord {
 export interface GameState {
   week: Week; currentRound: number
   students: Student[]; rounds: RoundRecord[]
-  roundOpen: boolean; pendingRound?: RoundRecord
+  roundOpen: boolean; displayRound?: number; pendingRound?: RoundRecord
   adminPassword: string
 }
 
@@ -293,6 +293,12 @@ export async function finalizeRound(): Promise<RoundRecord> {
   s.rounds.push(r); s.currentRound++; s.pendingRound = undefined; s.roundOpen = false
   await save()
   return r
+}
+
+export async function setDisplayRound(round: number): Promise<void> {
+  const s = await getState()
+  s.displayRound = round
+  await save()
 }
 
 export async function checkAdmin(pw: string): Promise<boolean> {
