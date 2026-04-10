@@ -55,8 +55,11 @@ async function kvGet(): Promise<GameState | null> {
   try {
     const { Redis } = await import('@upstash/redis')
     const redis = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL!, token: process.env.UPSTASH_REDIS_REST_TOKEN! })
-    return await redis.get<GameState>(KV_KEY)
-  } catch(e) { console.error("REDIS GET FAILED:", e); return null }
+    const raw = await redis.get(KV_KEY)
+    if (!raw) return null
+    if (typeof raw === 'string') return JSON.parse(raw) as GameState
+    return raw as GameState
+  } catch(e) { console.error('REDIS GET FAILED:', e); return null }
 }
 
 async function kvSet(state: GameState): Promise<void> {
@@ -68,7 +71,7 @@ async function kvSet(state: GameState): Promise<void> {
 }
 
 export async function getState(): Promise<GameState> {
-  if (_mem) return _mem
+  _mem = null  // ← add this line
   const persisted = await kvGet()
   if (persisted) {
     persisted.adminPassword = process.env.ADMIN_PASSWORD || 'hawk2024admin'
