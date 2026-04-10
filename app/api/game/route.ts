@@ -19,5 +19,6 @@ export async function GET() {
     })),
     lastRound: s.rounds.length > 0 ? s.rounds[s.rounds.length - 1] : null,
     rounds: s.rounds,
+    displayRound: s.displayRound,
   })
 }
