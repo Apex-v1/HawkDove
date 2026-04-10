@@ -4,10 +4,18 @@ export type PairType = 'H+H' | 'H+D' | 'D+D' | 'STAPLED'
 export type RoundPhase = 'open' | 'pending_review' | 'finalized'
 
 export interface Student {
-  id: string; name: string; email: string; points: number
-  choice?: Choice; hasChosen: boolean
-  staplePartnerId?: string; isHawkInStaple?: boolean; stapleTransferAmount?: number
+  id: string
+  name: string
+  email: string
+  tiebreaker: number
+  points: number
+  choice?: Choice
+  hasChosen: boolean
+  staplePartnerId?: string
+  isHawkInStaple?: boolean
+  stapleTransferAmount?: number
   isEliminated: boolean
+  roundHistory: { round: number; type: string; pair: string; result: string }[]
 }
 
 export interface PairingResult {
@@ -32,7 +40,7 @@ export interface GameState {
   adminPassword: string
 }
 
-const KV_KEY = 'hd_game_state_v2'
+const KV_KEY = 'hd_game_state_v3'
 let _mem: GameState | null = null
 
 function makeDefault(): GameState {
@@ -46,10 +54,7 @@ function makeDefault(): GameState {
 async function kvGet(): Promise<GameState | null> {
   try {
     const { Redis } = await import('@upstash/redis')
-    const redis = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL!,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-    })
+    const redis = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL!, token: process.env.UPSTASH_REDIS_REST_TOKEN! })
     return await redis.get<GameState>(KV_KEY)
   } catch { return null }
 }
@@ -57,12 +62,9 @@ async function kvGet(): Promise<GameState | null> {
 async function kvSet(state: GameState): Promise<void> {
   try {
     const { Redis } = await import('@upstash/redis')
-    const redis = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL!,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-    })
+    const redis = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL!, token: process.env.UPSTASH_REDIS_REST_TOKEN! })
     await redis.set(KV_KEY, state)
-  } catch { /* local dev — in-memory only */ }
+  } catch {}
 }
 
 export async function getState(): Promise<GameState> {
@@ -77,22 +79,36 @@ export async function getState(): Promise<GameState> {
   return _mem
 }
 
-async function save(): Promise<void> {
-  if (_mem) await kvSet(_mem)
-}
+async function save(): Promise<void> { if (_mem) await kvSet(_mem) }
 
-export async function resetState(): Promise<void> {
-  _mem = makeDefault()
-  await save()
-}
+export async function resetState(): Promise<void> { _mem = makeDefault(); await save() }
 
-export async function loadRoster(rows: { name: string; email: string; points: number }[]): Promise<void> {
+export async function loadRoster(rows: {
+  name: string; email: string; tiebreaker: number; points: number
+  roundType?: string; roundResult?: string; roundPair?: string
+}[]): Promise<void> {
   const s = await getState()
   s.students = rows.map((r, i) => ({
     id: `s${i}_${r.name.replace(/\W+/g, '').toLowerCase().slice(0, 8)}`,
-    name: r.name, email: r.email, points: r.points,
+    name: r.name, email: r.email,
+    tiebreaker: r.tiebreaker ?? 0,
+    points: r.points ?? 0,
     hasChosen: false, isEliminated: false,
+    roundHistory: r.roundType ? [{
+      round: s.currentRound || 1,
+      type: r.roundType || '',
+      pair: r.roundPair || '',
+      result: r.roundResult || '',
+    }] : [],
   }))
+  await save()
+}
+
+export async function updateStudent(id: string, fields: Partial<Pick<Student, 'points' | 'tiebreaker' | 'email' | 'name' | 'isEliminated'>>): Promise<void> {
+  const s = await getState()
+  const st = s.students.find(x => x.id === id)
+  if (!st) return
+  Object.assign(st, fields)
   await save()
 }
 
@@ -140,8 +156,7 @@ export async function submitChoice(studentId: string, choice: Choice): Promise<b
   if (!s.roundOpen) return false
   const st = s.students.find(x => x.id === studentId)
   if (!st || st.isEliminated) return false
-  st.choice = choice
-  st.hasChosen = true
+  st.choice = choice; st.hasChosen = true
   await save()
   return true
 }
@@ -189,12 +204,19 @@ export async function computeRound(): Promise<RoundRecord> {
 
     if (ca === 'hawk' && cb === 'hawk') {
       type = 'H+H'
-      if (a.points > b.points) { aDelta = b.points; bDelta = -b.points; note = `${a.name} (${a.points}) > ${b.name} (${b.points}) — takes all` }
-      else if (b.points > a.points) { bDelta = a.points; aDelta = -a.points; note = `${b.name} (${b.points}) > ${a.name} (${a.points}) — takes all` }
-      else {
+      // Use tiebreaker to resolve ties
+      const aScore = a.points + (a.tiebreaker ?? 0) * 0.001
+      const bScore = b.points + (b.tiebreaker ?? 0) * 0.001
+      if (aScore > bScore) {
+        aDelta = b.points; bDelta = -b.points
+        note = `${a.name} (${a.points}pts, tb:${a.tiebreaker}) > ${b.name} (${b.points}pts, tb:${b.tiebreaker}) — takes all`
+      } else if (bScore > aScore) {
+        bDelta = a.points; aDelta = -a.points
+        note = `${b.name} (${b.points}pts, tb:${b.tiebreaker}) > ${a.name} (${a.points}pts, tb:${a.tiebreaker}) — takes all`
+      } else {
         coinFlip = Math.random() > 0.5 ? 'heads' : 'tails'
-        if (coinFlip === 'heads') { aDelta = b.points; bDelta = -b.points; note = `Tied — coin flip heads → ${a.name} wins` }
-        else { bDelta = a.points; aDelta = -a.points; note = `Tied — coin flip tails → ${b.name} wins` }
+        if (coinFlip === 'heads') { aDelta = b.points; bDelta = -b.points; note = `Tied (pts+tb) — coin flip heads → ${a.name} wins` }
+        else { bDelta = a.points; aDelta = -a.points; note = `Tied (pts+tb) — coin flip tails → ${b.name} wins` }
       }
     } else if (ca === 'dove' && cb === 'dove') {
       type = 'D+D'; diceRoll = Math.floor(Math.random() * 20) + 1
@@ -224,8 +246,7 @@ export async function computeRound(): Promise<RoundRecord> {
       pairingId: `r${s.currentRound + 1}_sitsout_${out.id}`,
       type: 'D+D', aId: out.id, bId: out.id,
       aChoice: out.choice || 'dove', bChoice: out.choice || 'dove',
-      aDelta: 0, bDelta: 0,
-      note: `${out.name} sits out (odd number) — no change`,
+      aDelta: 0, bDelta: 0, note: `${out.name} sits out (odd number) — no change`,
     })
   }
 
@@ -260,6 +281,13 @@ export async function finalizeRound(): Promise<RoundRecord> {
     b.points = Math.max(0, Math.round((b.points + p.bDelta) * 100) / 100)
     if (a.points <= 0) a.isEliminated = true
     if (b.points <= 0) b.isEliminated = true
+    // append to round history
+    const pa = s.students.find(x => x.id === p.aId)!
+    const pb = s.students.find(x => x.id === p.bId)!
+    pa.roundHistory = pa.roundHistory || []
+    pb.roundHistory = pb.roundHistory || []
+    pa.roundHistory.push({ round: r.round, type: p.type, pair: pb.name, result: `${p.aDelta >= 0 ? '+' : ''}${p.aDelta}` })
+    pb.roundHistory.push({ round: r.round, type: p.type, pair: pa.name, result: `${p.bDelta >= 0 ? '+' : ''}${p.bDelta}` })
   })
   r.phase = 'finalized'; r.finalizedAt = new Date().toISOString()
   s.rounds.push(r); s.currentRound++; s.pendingRound = undefined; s.roundOpen = false

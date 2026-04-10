@@ -88,3 +88,5 @@ body {
 .tag-gold { border-color: var(--gold-bg); color: var(--gold); background: var(--gold-bg); }
 .tag-staple { border-color: #302008; color: #e8a020; background: #201408; }
 .tag-dd { border-color: #083020; color: var(--green); background: var(--green-bg); }
+
+@keyframes ticker { from { transform: translateX(100vw); } to { transform: translateX(-100%); } }

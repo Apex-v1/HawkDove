@@ -9,12 +9,15 @@ export async function GET() {
     currentRound: s.currentRound,
     week: s.week,
     students: s.students.map(st => ({
-      id: st.id, name: st.name, email: st.email, points: st.points,
+      id: st.id, name: st.name, email: st.email,
+      points: st.points, tiebreaker: st.tiebreaker,
       hasChosen: st.hasChosen,
       choice: st.hasChosen ? st.choice : undefined,
       isEliminated: st.isEliminated,
       staplePartnerId: st.staplePartnerId,
+      isHawkInStaple: st.isHawkInStaple,
     })),
     lastRound: s.rounds.length > 0 ? s.rounds[s.rounds.length - 1] : null,
+    rounds: s.rounds,
   })
 }

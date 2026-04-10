@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server'
-export const dynamic = 'force-dynamic'
-export async function POST() {
-  return NextResponse.json({ error: 'Use /api/player instead' }, { status: 410 })
-}
+/// <reference types="next" />
+/// <reference types="next/image-types/global" />
+
+// NOTE: This file should not be edited
+// see https://nextjs.org/docs/basic-features/typescript for more information.
