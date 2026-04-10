@@ -56,7 +56,7 @@ async function kvGet(): Promise<GameState | null> {
     const { Redis } = await import('@upstash/redis')
     const redis = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL!, token: process.env.UPSTASH_REDIS_REST_TOKEN! })
     return await redis.get<GameState>(KV_KEY)
-  } catch { return null }
+  } catch(e) { console.error("REDIS GET FAILED:", e); return null }
 }
 
 async function kvSet(state: GameState): Promise<void> {
@@ -64,7 +64,7 @@ async function kvSet(state: GameState): Promise<void> {
     const { Redis } = await import('@upstash/redis')
     const redis = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL!, token: process.env.UPSTASH_REDIS_REST_TOKEN! })
     await redis.set(KV_KEY, state)
-  } catch {}
+  } catch(e) { console.error("REDIS SET FAILED:", e) }
 }
 
 export async function getState(): Promise<GameState> {
