@@ -146,6 +146,7 @@ export default function AdminPage() {
           ))}
           {state.roundOpen && <span className="tag tag-dove pulse">● OPEN</span>}
           {state.pendingRound && <span className="tag tag-gold">⏳ REVIEW</span>}
+          <a href="/display" target="_blank" style={{ fontSize:10, color:'var(--dove)', textDecoration:'none', padding:'4px 9px', border:'1px solid var(--dove-bg)', display:'flex', alignItems:'center' }}>📊 Display</a>
           <button className="btn btn-danger" style={{ fontSize:10, padding:'4px 9px' }} onClick={() => { if (confirm('Reset?')) act('reset') }}>Reset</button>
         </div>
       </div>
