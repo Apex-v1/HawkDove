@@ -209,16 +209,16 @@ export async function computeRound(): Promise<RoundRecord> {
   type = 'H+H'
   const aTb = a.tiebreaker ?? 0
   const bTb = b.tiebreaker ?? 0
-  if (aTb > bTb) {
+if (aTb > bTb) {
     aDelta = b.points; bDelta = -b.points
-    note = `${a.name} (tb:${aTb}) > ${b.name} (tb:${bTb}) — higher tiebreaker takes all`
+    note = `${a.name} > ${b.name} — higher tiebreaker takes all`
   } else if (bTb > aTb) {
     bDelta = a.points; aDelta = -a.points
-    note = `${b.name} (tb:${bTb}) > ${a.name} (tb:${aTb}) — higher tiebreaker takes all`
+    note = `${b.name} > ${a.name} — higher tiebreaker takes all`
   } else {
     coinFlip = Math.random() > 0.5 ? 'heads' : 'tails'
-    if (coinFlip === 'heads') { aDelta = b.points; bDelta = -b.points; note = `Tied tiebreakers (${aTb}) — coin flip heads → ${a.name} wins` }
-    else { bDelta = a.points; aDelta = -a.points; note = `Tied tiebreakers (${aTb}) — coin flip tails → ${b.name} wins` }
+    if (coinFlip === 'heads') { aDelta = b.points; bDelta = -b.points; note = `Tied — coin flip heads → ${a.name} wins` }
+    else { bDelta = a.points; aDelta = -a.points; note = `Tied — coin flip tails → ${b.name} wins` }
   }
     } else if (ca === 'dove' && cb === 'dove') {
       type = 'D+D'; diceRoll = Math.floor(Math.random() * 20) + 1
