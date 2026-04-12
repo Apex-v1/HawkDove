@@ -399,8 +399,8 @@ function ChartsPanel({ game }: { game: GameInfo }) {
 
       {/* Hawk vs Dove avg */}
       <div style={{ padding:16, background:'var(--bg-card)', border:'1px solid var(--border)', gridColumn:'1/-1' }}>
-        <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:14 }}>HAWK vs DOVE — AVERAGE POINTS</div>
-        <div style={{ display:'flex', gap:12, alignItems:'flex-end', height:80 }}>
+      <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:24 }}>HAWK vs DOVE — AVERAGE POINTS</div>
+        <div style={{ display:'flex', gap:12, alignItems:'flex-end', height:100 }}>
           {[
             { label:`🦅 Hawks (${hawks.length})`, avg: hawkAvg, color:'var(--hawk)', bg:'var(--hawk-bg)' },
             { label:`🕊️ Doves (${doves.length})`, avg: doveAvg, color:'var(--dove)', bg:'var(--dove-bg)' },
