@@ -206,21 +206,20 @@ export async function computeRound(): Promise<RoundRecord> {
     let type: PairType, diceRoll: number | undefined, coinFlip: string | undefined
 
     if (ca === 'hawk' && cb === 'hawk') {
-      type = 'H+H'
-      // Use tiebreaker to resolve ties
-      const aScore = a.points + (a.tiebreaker ?? 0) * 0.001
-      const bScore = b.points + (b.tiebreaker ?? 0) * 0.001
-      if (aScore > bScore) {
-        aDelta = b.points; bDelta = -b.points
-        note = `${a.name} (${a.points}pts, tb:${a.tiebreaker}) > ${b.name} (${b.points}pts, tb:${b.tiebreaker}) — takes all`
-      } else if (bScore > aScore) {
-        bDelta = a.points; aDelta = -a.points
-        note = `${b.name} (${b.points}pts, tb:${b.tiebreaker}) > ${a.name} (${a.points}pts, tb:${a.tiebreaker}) — takes all`
-      } else {
-        coinFlip = Math.random() > 0.5 ? 'heads' : 'tails'
-        if (coinFlip === 'heads') { aDelta = b.points; bDelta = -b.points; note = `Tied (pts+tb) — coin flip heads → ${a.name} wins` }
-        else { bDelta = a.points; aDelta = -a.points; note = `Tied (pts+tb) — coin flip tails → ${b.name} wins` }
-      }
+  type = 'H+H'
+  const aTb = a.tiebreaker ?? 0
+  const bTb = b.tiebreaker ?? 0
+  if (aTb > bTb) {
+    aDelta = b.points; bDelta = -b.points
+    note = `${a.name} (tb:${aTb}) > ${b.name} (tb:${bTb}) — higher tiebreaker takes all`
+  } else if (bTb > aTb) {
+    bDelta = a.points; aDelta = -a.points
+    note = `${b.name} (tb:${bTb}) > ${a.name} (tb:${aTb}) — higher tiebreaker takes all`
+  } else {
+    coinFlip = Math.random() > 0.5 ? 'heads' : 'tails'
+    if (coinFlip === 'heads') { aDelta = b.points; bDelta = -b.points; note = `Tied tiebreakers (${aTb}) — coin flip heads → ${a.name} wins` }
+    else { bDelta = a.points; aDelta = -a.points; note = `Tied tiebreakers (${aTb}) — coin flip tails → ${b.name} wins` }
+  }
     } else if (ca === 'dove' && cb === 'dove') {
       type = 'D+D'; diceRoll = Math.floor(Math.random() * 20) + 1
       aDelta = diceRoll; bDelta = diceRoll
