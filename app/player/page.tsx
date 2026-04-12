@@ -196,7 +196,7 @@ export default function PlayerPage() {
             <div style={{ fontSize:11, color:'var(--text-mid)', lineHeight:1.7 }}>
               <div><span style={{ color:'var(--dove)' }}>D+D</span> → Both gain +1–20 pts (random dice)</div>
               <div><span style={{ color:'var(--hawk)' }}>H+D</span> → Hawk takes 25% of Dove ×3</div>
-              <div><span style={{ color:'var(--hawk)' }}>H+H</span> → Higher pts (then tiebreaker) takes all</div>
+              <div><span style={{ color:'var(--hawk)' }}>H+H</span> → Higher tiebreaker wins; coinflip used if tied</div>
             </div>
           </div>
         </div>
