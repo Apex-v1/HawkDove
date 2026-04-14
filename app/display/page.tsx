@@ -189,14 +189,15 @@ export default function DisplayPage() {
               {/* Last round results */}
               {game.lastRound && (
                 <div style={{ padding:14, background:'var(--bg-card)', border:'1px solid var(--border)' }}>
-                  <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:10 }}>ROUND {game.lastRound.round} RESULTS</div>
+                  <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:10 }}>ROUND {shownRound||'—'} RESULTS</div>
                   <div style={{ display:'flex', flexDirection:'column', gap:4, maxHeight:300, overflowY:'auto' }}>
-                    {game.lastRound.pairings.filter(p => p.aId !== p.bId).slice(0,10).map(p => {
-                      const a = game.students.find(s => s.id === p.aId)
-                      const b = game.students.find(s => s.id === p.bId)
-                      const tc = p.type==='H+H'?'var(--hawk)':p.type==='D+D'?'var(--dove)':p.type==='STAPLED'?'var(--gold)':'var(--text-mid)'
-                      return (
-                        <div key={p.pairingId} style={{ fontSize:10, display:'flex', gap:4, alignItems:'center', padding:'3px 0', borderBottom:'1px solid var(--border)' }}>
+  {game.lastRound.pairings.filter(p => p.aId !== p.bId).map(p => {
+    const a = game.students.find(s => s.id === p.aId)
+    const b = game.students.find(s => s.id === p.bId)
+    const tc = p.type==='H+H'?'var(--hawk)':p.type==='D+D'?'var(--dove)':p.type==='STAPLED'?'var(--gold)':'var(--text-mid)'
+    return (
+      <div key={p.pairingId} style={{ fontSize:10, display:'flex', gap:4, alignItems:'center', padding:'3px 0', borderBottom:'1px solid var(--border)' }}>
+        <span style={{ color:tc, width:52, flexShrink:0, fontSize:9 }}>{p.type}</span>
                           <span style={{ color:tc, width:36, flexShrink:0 }}>{p.type}</span>
                           <span style={{ flex:1, color:'var(--text-mid)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                             {a?.name.split(',')[0]??'?'} vs {b?.name.split(',')[0]??'?'}
