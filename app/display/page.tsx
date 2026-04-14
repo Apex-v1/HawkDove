@@ -198,7 +198,6 @@ export default function DisplayPage() {
     return (
       <div key={p.pairingId} style={{ fontSize:10, display:'flex', gap:4, alignItems:'center', padding:'3px 0', borderBottom:'1px solid var(--border)' }}>
         <span style={{ color:tc, width:52, flexShrink:0, fontSize:9 }}>{p.type}</span>
-                          <span style={{ color:tc, width:36, flexShrink:0 }}>{p.type}</span>
                           <span style={{ flex:1, color:'var(--text-mid)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                             {a?.name.split(',')[0]??'?'} vs {b?.name.split(',')[0]??'?'}
                           </span>
