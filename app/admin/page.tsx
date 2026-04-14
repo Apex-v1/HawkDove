@@ -311,12 +311,24 @@ export default function AdminPage() {
                             </span>
                             <button className="btn btn-danger" style={{ fontSize:9, padding:'2px 7px' }} onClick={() => act('remove_staple',{id:hawk.id})}>✕</button>
                           </div>
-                          <div style={{ display:'flex', gap:5, alignItems:'center' }}>
+                         <div style={{ display:'flex', gap:5, alignItems:'center', flexWrap:'wrap' }}>
                             <span style={{ fontSize:11, color:'var(--text-dim)' }}>Hawk returns:</span>
-                            <input type="number" className="input" style={{ width:80, padding:'3px 7px', fontSize:12 }}
-                              placeholder="0" defaultValue={hawk.stapleTransferAmount ?? ''}
+                            <input type="number" className="input" style={{ width:70, padding:'3px 7px', fontSize:12 }}
+                              placeholder="0 pts" defaultValue={hawk.stapleTransferAmount ?? ''}
                               onBlur={e => act('set_staple_transfer',{hawkId:hawk.id, amount:parseFloat(e.target.value)||0})} />
-                            <span style={{ fontSize:11, color:'var(--text-dim)' }}>pts</span>
+                            <span style={{ fontSize:11, color:'var(--text-dim)' }}>pts — OR —</span>
+                            <input type="number" className="input" style={{ width:55, padding:'3px 7px', fontSize:12 }}
+                              placeholder="%" min={0} max={100}
+                              onBlur={e => {
+                                const pct = parseFloat(e.target.value)
+                                if (isNaN(pct)) return
+                                const dove = state.students.find(x => x.id === hawk.staplePartnerId)
+                                if (!dove) return
+                                const taken = Math.round(dove.points * 0.25 * 3 * 100) / 100
+                                const amount = Math.round(taken * (pct / 100) * 100) / 100
+                                act('set_staple_transfer', { hawkId: hawk.id, amount })
+                              }} />
+                            <span style={{ fontSize:11, color:'var(--text-dim)' }}>% of what Hawk took</span>
                           </div>
                         </div>
                       )
