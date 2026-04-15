@@ -281,8 +281,7 @@ export async function finalizeRound(): Promise<RoundRecord> {
     const b = s.students.find(x => x.id === p.bId)!
     a.points = Math.max(0, Math.round((a.points + p.aDelta) * 100) / 100)
     b.points = Math.max(0, Math.round((b.points + p.bDelta) * 100) / 100)
-    if (a.points <= 0) a.isEliminated = true
-    if (b.points <= 0) b.isEliminated = true
+    // Auto-elimination disabled — use admin panel to manually eliminate players
     // append to round history
     const pa = s.students.find(x => x.id === p.aId)!
     const pb = s.students.find(x => x.id === p.bId)!
