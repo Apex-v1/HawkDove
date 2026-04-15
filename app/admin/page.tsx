@@ -70,6 +70,8 @@ export default function AdminPage() {
   const [displayRoundInput, setDisplayRoundInput] = useState('')
   const [sortKey, setSortKey] = useState<'name'|'email'|'points'|'tiebreaker'|'choice'|'status'>('points')
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc')
+  const [showAddStudent, setShowAddStudent] = useState(false)
+  const [newStudent, setNewStudent] = useState({ name: '', email: '', tiebreaker: '0', points: '0' })
 
   const fetchState = useCallback(async () => {
     const res = await fetch('/api/admin/control', { cache: 'no-store' })
@@ -185,7 +187,7 @@ export default function AdminPage() {
   if (!state) return <div style={{ padding:32, color:'var(--text-dim)' }}>Loading...</div>
 
   const active = state.students.filter(s => !s.isEliminated)
-  const submitted = active.filter(s => s.hasChosen).length
+  const submitted = active.filter(s => s.hasChosen || !!s.staplePartnerId).length
   const stapledPairs = state.students.filter(s => s.staplePartnerId && s.isHawkInStaple)
 
   return (
@@ -363,9 +365,57 @@ export default function AdminPage() {
           <div className="card" style={{ padding:14 }}>
             <div style={{ display:'flex', justifyContent:'space-between', marginBottom:10 }}>
               <div className="label">{state.students.length} Students</div>
-              <div style={{ fontSize:11, color:'var(--text-dim)' }}>Click any row to edit · Click 💀 to toggle eliminated</div>
+              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                <div style={{ fontSize:11, color:'var(--text-dim)' }}>Click any row to edit · Click 💀 to toggle eliminated</div>
+                <button className="btn btn-ghost" style={{ fontSize:11, padding:'3px 10px' }}
+                  onClick={() => setShowAddStudent(v => !v)}>
+                  {showAddStudent ? '✕ Cancel' : '+ Add Student'}
+                </button>
+              </div>
             </div>
-            <div style={{ overflowX:'auto', maxHeight:600, overflowY:'auto' }}>
+            {showAddStudent && (
+              <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'flex-end', padding:'10px 0', borderBottom:'1px solid var(--border)', marginBottom:10 }}>
+                <div>
+                  <div className="label" style={{ marginBottom:4, fontSize:9 }}>Name (Last, First)</div>
+                  <input className="input" style={{ padding:'4px 8px', fontSize:12, width:160 }}
+                    placeholder="Smith, Jane" value={newStudent.name}
+                    onChange={e => setNewStudent(p => ({...p, name: e.target.value}))} />
+                </div>
+                <div>
+                  <div className="label" style={{ marginBottom:4, fontSize:9 }}>Email</div>
+                  <input className="input" style={{ padding:'4px 8px', fontSize:12, width:160 }}
+                    placeholder="jane@school.edu" value={newStudent.email}
+                    onChange={e => setNewStudent(p => ({...p, email: e.target.value}))} />
+                </div>
+                <div>
+                  <div className="label" style={{ marginBottom:4, fontSize:9 }}>Tiebreaker</div>
+                  <input type="number" className="input" style={{ padding:'4px 8px', fontSize:12, width:70 }}
+                    value={newStudent.tiebreaker}
+                    onChange={e => setNewStudent(p => ({...p, tiebreaker: e.target.value}))} />
+                </div>
+                <div>
+                  <div className="label" style={{ marginBottom:4, fontSize:9 }}>Starting Points</div>
+                  <input type="number" className="input" style={{ padding:'4px 8px', fontSize:12, width:80 }}
+                    value={newStudent.points}
+                    onChange={e => setNewStudent(p => ({...p, points: e.target.value}))} />
+                </div>
+                <button className="btn btn-dove" style={{ padding:'6px 14px', fontSize:12 }}
+                  onClick={async () => {
+                    if (!newStudent.name.trim() || !newStudent.email.trim()) return
+                    await act('add_student', {
+                      name: newStudent.name.trim(),
+                      email: newStudent.email.trim(),
+                      tiebreaker: parseFloat(newStudent.tiebreaker) || 0,
+                      points: parseFloat(newStudent.points) || 0,
+                    })
+                    setNewStudent({ name: '', email: '', tiebreaker: '0', points: '0' })
+                    setShowAddStudent(false)
+                  }}>
+                  Add →
+                </button>
+              </div>
+            )}
+            <div style={{ overflowX:'auto', height:'calc(100vh - 320px)', overflowY:'auto' }}>
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                 <thead style={{ position:'sticky', top:0, background:'var(--bg-card)' }}>
                   <tr style={{ borderBottom:'1px solid var(--border)' }}>
