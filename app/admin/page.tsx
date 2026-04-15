@@ -68,6 +68,8 @@ export default function AdminPage() {
   const [uploading, setUploading] = useState(false)
   const [uploadMsg, setUploadMsg] = useState('')
   const [displayRoundInput, setDisplayRoundInput] = useState('')
+  const [sortKey, setSortKey] = useState<'name'|'email'|'points'|'tiebreaker'|'choice'|'status'>('points')
+  const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc')
 
   const fetchState = useCallback(async () => {
     const res = await fetch('/api/admin/control', { cache: 'no-store' })
@@ -131,6 +133,26 @@ export default function AdminPage() {
       await act('override_choice', { id, choice: editFields.choice || null })
     }
     setEditingId(null)
+  }
+
+  function sortedStudents(students: Student[]) {
+    return [...students].sort((a, b) => {
+      let av: string|number = '', bv: string|number = ''
+      if (sortKey === 'name') { av = a.name; bv = b.name }
+      else if (sortKey === 'email') { av = a.email; bv = b.email }
+      else if (sortKey === 'points') { av = a.points; bv = b.points }
+      else if (sortKey === 'tiebreaker') { av = a.tiebreaker; bv = b.tiebreaker }
+      else if (sortKey === 'choice') { av = a.choice || ''; bv = b.choice || '' }
+      else if (sortKey === 'status') { av = a.isEliminated ? 1 : 0; bv = b.isEliminated ? 1 : 0 }
+      if (av < bv) return sortDir === 'asc' ? -1 : 1
+      if (av > bv) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+  }
+
+  function toggleSort(k: typeof sortKey) {
+    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(k); setSortDir('asc') }
   }
 
   async function addStaple() {
@@ -347,13 +369,25 @@ export default function AdminPage() {
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                 <thead style={{ position:'sticky', top:0, background:'var(--bg-card)' }}>
                   <tr style={{ borderBottom:'1px solid var(--border)' }}>
-                    {['#','Name','Email','TB','Points','Choice','Stapled','Elim',''].map(h => (
-                      <th key={h} style={{ padding:'5px 8px', textAlign:'left', color:'var(--text-dim)', fontWeight:400, fontSize:10, letterSpacing:'0.12em', whiteSpace:'nowrap' }}>{h}</th>
+                    <th style={{ padding:'5px 8px', color:'var(--text-dim)', fontWeight:400, fontSize:10 }}>#</th>
+                    {(['name','email','tiebreaker','points','choice'] as const).map(k => (
+                      <th key={k} onClick={() => toggleSort(k)}
+                        style={{ padding:'5px 8px', textAlign:'left', color: sortKey===k ? 'var(--dove)' : 'var(--text-dim)',
+                          fontWeight:400, fontSize:10, letterSpacing:'0.12em', whiteSpace:'nowrap', cursor:'pointer', userSelect:'none' }}>
+                        {k==='tiebreaker'?'TB':k.charAt(0).toUpperCase()+k.slice(1)}{sortKey===k?(sortDir==='asc'?' ↑':' ↓'):''}
+                      </th>
                     ))}
+                    <th style={{ padding:'5px 8px', color:'var(--text-dim)', fontWeight:400, fontSize:10 }}>Stapled</th>
+                    <th onClick={() => toggleSort('status')}
+                      style={{ padding:'5px 8px', color: sortKey==='status' ? 'var(--dove)' : 'var(--text-dim)',
+                        fontWeight:400, fontSize:10, cursor:'pointer', userSelect:'none' }}>
+                      Elim{sortKey==='status'?(sortDir==='asc'?' ↑':' ↓'):''}
+                    </th>
+                    <th style={{ padding:'5px 8px', color:'var(--text-dim)', fontWeight:400, fontSize:10 }}></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {[...state.students].sort((a,b)=>b.points-a.points).map((s,i) => (
+                  {sortedStudents(state.students).map((s,i) => (
                     editingId === s.id ? (
                       <tr key={s.id} style={{ background:'rgba(232,160,32,0.06)', borderBottom:'1px solid var(--border)' }}>
                         <td style={{ padding:'5px 8px', color:'var(--text-dim)' }}>{i+1}</td>
