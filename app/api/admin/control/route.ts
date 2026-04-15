@@ -89,6 +89,17 @@ export async function POST(req: NextRequest) {
         }
         return NextResponse.json({ ok:true, state: await getState() })
       }
+      case 'add_student': {
+        const s = await getState()
+        const id = `m_${Date.now()}_${String(payload.email).replace(/\W+/g,'').slice(0,8)}`
+        s.students.push({
+          id, name: payload.name as string, email: payload.email as string,
+          tiebreaker: payload.tiebreaker as number, points: payload.points as number,
+          hasChosen: false, isEliminated: false, roundHistory: [],
+        })
+        await kvSave(s)
+        return NextResponse.json({ ok:true, state: await getState() })
+      }
       case 'reset': { await resetState(); return NextResponse.json({ ok:true }) }
       default: return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
     }
