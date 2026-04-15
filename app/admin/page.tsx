@@ -338,19 +338,29 @@ export default function AdminPage() {
                             <input type="number" className="input" style={{ width:70, padding:'3px 7px', fontSize:12 }}
                               placeholder="0 pts" defaultValue={hawk.stapleTransferAmount ?? ''}
                               onBlur={e => act('set_staple_transfer',{hawkId:hawk.id, amount:parseFloat(e.target.value)||0})} />
-                            <span style={{ fontSize:11, color:'var(--text-dim)' }}>pts — OR —</span>
-                            <input type="number" className="input" style={{ width:55, padding:'3px 7px', fontSize:12 }}
-                              placeholder="%" min={0} max={100}
-                              onChange={e => {
-                                const pct = parseFloat(e.target.value)
-                                if (isNaN(pct)) return
-                                const dove = state.students.find(x => x.id === hawk.staplePartnerId)
-                                if (!dove) return
-                                const taken = Math.round(dove.points * 0.25 * 3 * 100) / 100
-                                const amount = Math.round(taken * (pct / 100) * 100) / 100
-                                act('set_staple_transfer', { hawkId: hawk.id, amount })
-                              }} />
-                            <span style={{ fontSize:11, color:'var(--text-dim)' }}>% of what Hawk took</span>
+<span style={{ fontSize:11, color:'var(--text-dim)' }}>pts — OR —</span>
+<input type="number" className="input" style={{ width:55, padding:'3px 7px', fontSize:12 }}
+  placeholder="%" min={0} max={100}
+  onKeyDown={e => {
+    if (e.key !== 'Enter') return
+    const pct = parseFloat((e.target as HTMLInputElement).value)
+    if (isNaN(pct)) return
+    const dove = state.students.find(x => x.id === hawk.staplePartnerId)
+    if (!dove) return
+    const taken = Math.round(dove.points * 0.25 * 3 * 100) / 100
+    const amount = Math.round(taken * (pct / 100) * 100) / 100
+    act('set_staple_transfer', { hawkId: hawk.id, amount })
+  }}
+  onBlur={e => {
+    const pct = parseFloat(e.target.value)
+    if (isNaN(pct)) return
+    const dove = state.students.find(x => x.id === hawk.staplePartnerId)
+    if (!dove) return
+    const taken = Math.round(dove.points * 0.25 * 3 * 100) / 100
+    const amount = Math.round(taken * (pct / 100) * 100) / 100
+    act('set_staple_transfer', { hawkId: hawk.id, amount })
+  }} />
+<span style={{ fontSize:11, color:'var(--text-dim)' }}>% of what Hawk took</span>
                           </div>
                         </div>
                       )
