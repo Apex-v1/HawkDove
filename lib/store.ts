@@ -221,9 +221,12 @@ if (aTb > bTb) {
     else { bDelta = a.points; aDelta = -a.points; note = `Tied — coin flip tails → ${b.name} wins` }
   }
     } else if (ca === 'dove' && cb === 'dove') {
-      type = 'D+D'; diceRoll = Math.floor(Math.random() * 20) + 1
-      aDelta = diceRoll; bDelta = diceRoll
-      note = `Both Dove — dice roll: ${diceRoll}, each gains +${diceRoll}pts`
+      type = 'D+D'
+      const aDiceRoll = Math.floor(Math.random() * 20) + 1
+      const bDiceRoll = Math.floor(Math.random() * 20) + 1
+      diceRoll = aDiceRoll
+      aDelta = aDiceRoll; bDelta = bDiceRoll
+      note = `Both Dove — ${a.name} rolls ${aDiceRoll}, ${b.name} rolls ${bDiceRoll}`
     } else {
       type = 'H+D'
       const [hawk, dove, hIsA] = ca === 'hawk' ? [a, b, true] : [b, a, false]
@@ -279,8 +282,8 @@ export async function finalizeRound(): Promise<RoundRecord> {
     if (p.aId === p.bId) return
     const a = s.students.find(x => x.id === p.aId)!
     const b = s.students.find(x => x.id === p.bId)!
-    a.points = Math.max(0, Math.round((a.points + p.aDelta) * 100) / 100)
-    b.points = Math.max(0, Math.round((b.points + p.bDelta) * 100) / 100)
+    a.points = Math.round((a.points + p.aDelta) * 100) / 100
+    b.points = Math.round((b.points + p.bDelta) * 100) / 100
     // Auto-elimination disabled — use admin panel to manually eliminate players
     // append to round history
     const pa = s.students.find(x => x.id === p.aId)!
