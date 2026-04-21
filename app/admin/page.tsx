@@ -452,7 +452,7 @@ export default function AdminPage() {
                                 onKeyDown={e => {
                                   if (e.key === 'Enter') {
                                     const delta = parseFloat(adjustVal)
-                                    if (!isNaN(delta)) act('update_student', { id: s.id, name: s.name, email: s.email, tiebreaker: s.tiebreaker, points: Math.max(0, Math.round((s.points + delta) * 100) / 100) })
+                                    if (!isNaN(delta)) act('update_student', { id: s.id, name: s.name, email: s.email, tiebreaker: s.tiebreaker, points: Math.round((s.points + delta) * 100) / 100 })
                                     setAdjustId(null); setAdjustVal('')
                                   }
                                   if (e.key === 'Escape') { setAdjustId(null); setAdjustVal('') }
@@ -460,7 +460,7 @@ export default function AdminPage() {
                               <button className="btn btn-gold" style={{ padding:'2px 6px', fontSize:10 }}
                                 onClick={() => {
                                   const delta = parseFloat(adjustVal)
-                                  if (!isNaN(delta)) act('update_student', { id: s.id, name: s.name, email: s.email, tiebreaker: s.tiebreaker, points: Math.max(0, Math.round((s.points + delta) * 100) / 100) })
+                                  if (!isNaN(delta)) act('update_student', { id: s.id, name: s.name, email: s.email, tiebreaker: s.tiebreaker, points: Math.round((s.points + delta) * 100) / 100 })
                                   setAdjustId(null); setAdjustVal('')
                                 }}>✓</button>
                               <button className="btn btn-ghost" style={{ padding:'2px 6px', fontSize:10 }}
