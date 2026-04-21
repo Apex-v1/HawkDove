@@ -70,6 +70,8 @@ export default function AdminPage() {
   const [displayRoundInput, setDisplayRoundInput] = useState('')
   const [sortKey, setSortKey] = useState<'name'|'email'|'points'|'tiebreaker'|'choice'|'status'>('points')
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc')
+  const [adjustId, setAdjustId] = useState<string|null>(null)
+  const [adjustVal, setAdjustVal] = useState('')
 
   const fetchState = useCallback(async () => {
     const res = await fetch('/api/admin/control', { cache: 'no-store' })
@@ -394,6 +396,7 @@ export default function AdminPage() {
                       Elim{sortKey==='status'?(sortDir==='asc'?' ↑':' ↓'):''}
                     </th>
                     <th style={{ padding:'5px 8px', color:'var(--text-dim)', fontWeight:400, fontSize:10 }}></th>
+                    <th style={{ padding:'5px 8px', color:'var(--text-dim)', fontWeight:400, fontSize:10 }}>+/−</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -413,7 +416,7 @@ export default function AdminPage() {
                             <option value="dove">🕊️ Dove</option>
                           </select>
                         </td>
-                        <td colSpan={2} />
+                        <td colSpan={3} />
                         <td style={{ padding:'4px 6px' }}>
                           <div style={{ display:'flex', gap:4 }}>
                             <button className="btn btn-gold" style={{ padding:'3px 8px', fontSize:10 }} onClick={() => saveEdit(s.id)}>Save</button>
@@ -440,6 +443,37 @@ export default function AdminPage() {
                           </button>
                         </td>
                         <td style={{ padding:'5px 8px' }}><span style={{ fontSize:10, color:'var(--text-dim)', cursor:'pointer' }} onClick={() => startEdit(s)}>edit</span></td>
+                        <td style={{ padding:'4px 6px' }} onClick={e => e.stopPropagation()}>
+                          {adjustId === s.id ? (
+                            <div style={{ display:'flex', gap:3, alignItems:'center' }}>
+                              <input type="number" className="input" style={{ width:60, padding:'2px 5px', fontSize:11 }}
+                                placeholder="±pts" value={adjustVal}
+                                onChange={e => setAdjustVal(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') {
+                                    const delta = parseFloat(adjustVal)
+                                    if (!isNaN(delta)) act('update_student', { id: s.id, name: s.name, email: s.email, tiebreaker: s.tiebreaker, points: Math.max(0, Math.round((s.points + delta) * 100) / 100) })
+                                    setAdjustId(null); setAdjustVal('')
+                                  }
+                                  if (e.key === 'Escape') { setAdjustId(null); setAdjustVal('') }
+                                }} autoFocus />
+                              <button className="btn btn-gold" style={{ padding:'2px 6px', fontSize:10 }}
+                                onClick={() => {
+                                  const delta = parseFloat(adjustVal)
+                                  if (!isNaN(delta)) act('update_student', { id: s.id, name: s.name, email: s.email, tiebreaker: s.tiebreaker, points: Math.max(0, Math.round((s.points + delta) * 100) / 100) })
+                                  setAdjustId(null); setAdjustVal('')
+                                }}>✓</button>
+                              <button className="btn btn-ghost" style={{ padding:'2px 6px', fontSize:10 }}
+                                onClick={() => { setAdjustId(null); setAdjustVal('') }}>✕</button>
+                            </div>
+                          ) : (
+                            <button onClick={() => { setAdjustId(s.id); setAdjustVal('') }}
+                              style={{ background:'transparent', border:'1px solid var(--border)', cursor:'pointer',
+                                fontSize:11, color:'var(--text-dim)', padding:'2px 7px', fontFamily:'inherit' }}>
+                              ±
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     )
                   ))}
