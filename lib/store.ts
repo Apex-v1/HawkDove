@@ -47,6 +47,8 @@ export interface VotingState {
   deadline: string
   resultsRevealed: boolean
   votedEmails: string[]
+  presidentId?: string
+  presidentTitle?: string
 }
 
 export interface GameState {
@@ -70,7 +72,7 @@ function makeDefault(): GameState {
     roundOpen: false,
     adminPassword: process.env.ADMIN_PASSWORD || 'hawk2024admin',
     gameTitle: '',
-    voting: { open: false, optionA: 'Support', optionB: 'Fight', deadline: '', resultsRevealed: false, votedEmails: [] },
+    voting: { open: false, optionA: 'Support', optionB: 'Fight', deadline: '', resultsRevealed: false, votedEmails: [], presidentId: '', presidentTitle: '' },
     votingTabOpen: false,
     newsboxTabOpen: false,
     newsItems: [],
