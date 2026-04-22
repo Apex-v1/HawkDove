@@ -8,6 +8,18 @@ export async function GET() {
     roundOpen: s.roundOpen,
     currentRound: s.currentRound,
     week: s.week,
+    displayRound: s.displayRound,
+    gameTitle: s.gameTitle || '',
+    votingTabOpen: s.votingTabOpen,
+    newsboxTabOpen: s.newsboxTabOpen,
+    newsItems: s.newsItems || [],
+    voting: {
+      open: s.voting.open,
+      optionA: s.voting.optionA,
+      optionB: s.voting.optionB,
+      deadline: s.voting.deadline,
+      resultsRevealed: s.voting.resultsRevealed,
+    },
     students: s.students.map(st => ({
       id: st.id, name: st.name, email: st.email,
       points: st.points, tiebreaker: st.tiebreaker,
@@ -19,6 +31,5 @@ export async function GET() {
     })),
     lastRound: s.rounds.length > 0 ? s.rounds[s.rounds.length - 1] : null,
     rounds: s.rounds,
-    displayRound: s.displayRound,
   })
 }
