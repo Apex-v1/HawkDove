@@ -12,6 +12,7 @@ interface Pairing {
 }
 interface GameInfo {
   roundOpen: boolean; currentRound: number; week: number
+  gameTitle?: string
   students: StudentInfo[]
   lastRound: { round: number; pairings: Pairing[]; snapshotAfter: Record<string,number> } | null
 }
@@ -85,9 +86,22 @@ export default function PlayerPage() {
         <div style={{ textAlign:'center', marginBottom:28 }}>
           <div className="label" style={{ marginBottom:8 }}>Jesse Driscoll's</div>
           <div style={{ fontSize:34, fontWeight:500, letterSpacing:'-0.02em' }}>
-            <span style={{ color:'var(--hawk)' }}>HAWK</span>
-            <span style={{ color:'var(--text-dim)', margin:'0 8px' }}>/</span>
-            <span style={{ color:'var(--dove)' }}>DOVE</span>
+            {game?.gameTitle ? (
+              <>
+                {game.gameTitle.split('/').map((part, i, arr) => (
+                  <span key={i}>
+                    <span style={{ color: i===0 ? 'var(--hawk)' : 'var(--dove)' }}>{part.trim()}</span>
+                    {i < arr.length-1 && <span style={{ color:'var(--text-dim)', margin:'0 8px' }}>/</span>}
+                  </span>
+                ))}
+              </>
+            ) : (
+              <>
+                <span style={{ color:'var(--hawk)' }}>HAWK</span>
+                <span style={{ color:'var(--text-dim)', margin:'0 8px' }}>/</span>
+                <span style={{ color:'var(--dove)' }}>DOVE</span>
+              </>
+            )}
           </div>
         </div>
         <div className="card" style={{ padding:18 }}>
@@ -129,9 +143,22 @@ export default function PlayerPage() {
       {/* Header */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
         <div style={{ fontSize:15, fontWeight:500 }}>
-          <span style={{ color:'var(--hawk)' }}>HAWK</span>
-          <span style={{ color:'var(--text-dim)', margin:'0 5px' }}>/</span>
-          <span style={{ color:'var(--dove)' }}>DOVE</span>
+          {game?.gameTitle ? (
+            <>
+              {game.gameTitle.split('/').map((part, i, arr) => (
+                <span key={i}>
+                  <span style={{ color: i===0 ? 'var(--hawk)' : 'var(--dove)' }}>{part.trim()}</span>
+                  {i < arr.length-1 && <span style={{ color:'var(--text-dim)', margin:'0 5px' }}>/</span>}
+                </span>
+              ))}
+            </>
+          ) : (
+            <>
+              <span style={{ color:'var(--hawk)' }}>HAWK</span>
+              <span style={{ color:'var(--text-dim)', margin:'0 5px' }}>/</span>
+              <span style={{ color:'var(--dove)' }}>DOVE</span>
+            </>
+          )}
         </div>
         <div style={{ display:'flex', gap:8, alignItems:'center' }}>
           <a href="/display" target="_blank" style={{ fontSize:10, color:'var(--text-dim)', textDecoration:'none', padding:'4px 9px', border:'1px solid var(--border)' }}>📊 Display</a>
