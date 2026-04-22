@@ -268,6 +268,10 @@ export default function AdminPage() {
             title="Reshuffle pairings with a new random seed">
             🔀 Re-randomize
           </button>
+          <button className="btn btn-danger" style={{ padding:'7px 14px', fontSize:12 }}
+            onClick={async () => { if (confirm('Discard this round? Submissions will be cleared.')) { await act('cancel_round'); setTab('roster') } }} disabled={!!loading}>
+            ✕ Cancel Round
+          </button>
           <button className="btn btn-hawk" style={{ padding:'7px 14px', fontSize:12 }}
             onClick={async () => { await act('finalize_round'); setTab('history') }} disabled={!!loading}>
             ✓ Finalize & Push
@@ -540,6 +544,10 @@ export default function AdminPage() {
                     onClick={async () => { await act('rerandomize') }} disabled={!!loading}
                     title="Reshuffle all pairings with a new random seed">
                     🔀 Re-randomize
+                  </button>
+                  <button className="btn btn-danger" style={{ padding:'7px 14px', fontSize:12 }}
+                    onClick={async () => { if (confirm('Discard this round? Submissions will be cleared.')) { await act('cancel_round'); setTab('roster') } }} disabled={!!loading}>
+                    ✕ Cancel Round
                   </button>
                   <button className="btn btn-hawk" style={{ padding:'9px 18px' }}
                     onClick={async () => { await act('finalize_round'); setTab('history') }}>
