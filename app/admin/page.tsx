@@ -1,12 +1,13 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 
-type Tab = 'roster' | 'round' | 'history' | 'insights'
+type Tab = 'roster' | 'round' | 'history' | 'insights' | 'voting' | 'newsbox'
 
 interface Student {
   id: string; name: string; email: string; tiebreaker: number; points: number
   hasChosen: boolean; choice?: string; isEliminated: boolean
   staplePartnerId?: string; isHawkInStaple?: boolean; stapleTransferAmount?: number
+  voteChoice?: string
   roundHistory?: { round: number; type: string; pair: string; result: string }[]
 }
 interface Pairing {
@@ -18,9 +19,16 @@ interface RoundRecord {
   snapshotBefore: Record<string,number>; snapshotAfter: Record<string,number>
   computedAt: string; finalizedAt?: string
 }
+interface NewsItem { id: string; html: string; createdAt: string }
+interface VotingState { open: boolean; optionA: string; optionB: string; deadline: string; resultsRevealed: boolean; votedEmails: string[] }
 interface GameState {
   week: number; currentRound: number; displayRound?: number; students: Student[]
   rounds: RoundRecord[]; roundOpen: boolean; pendingRound?: RoundRecord
+  gameTitle?: string
+  voting: VotingState
+  votingTabOpen: boolean
+  newsboxTabOpen: boolean
+  newsItems: NewsItem[]
 }
 
 function fmt(n: number) {
@@ -72,6 +80,16 @@ export default function AdminPage() {
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc')
   const [adjustId, setAdjustId] = useState<string|null>(null)
   const [adjustVal, setAdjustVal] = useState('')
+  const [showAddStudent, setShowAddStudent] = useState(false)
+  const [newStudent, setNewStudent] = useState({ name: '', email: '', tiebreaker: '0', points: '0' })
+  // Voting state
+  const [votingOptionA, setVotingOptionA] = useState('Support')
+  const [votingOptionB, setVotingOptionB] = useState('Fight')
+  const [votingDeadline, setVotingDeadline] = useState('')
+  const [gameTitleInput, setGameTitleInput] = useState('')
+  // Newsbox state
+  const [newsEditor, setNewsEditor] = useState('')
+  const [newsEditorRef, setNewsEditorRef] = useState<HTMLDivElement|null>(null)
 
   const fetchState = useCallback(async () => {
     const res = await fetch('/api/admin/control', { cache: 'no-store' })
@@ -88,8 +106,14 @@ export default function AdminPage() {
   }, [authed, fetchState])
 
   useEffect(() => {
-    if (state && displayRoundInput === '') {
-      setDisplayRoundInput(String(state.displayRound ?? state.currentRound))
+    if (state) {
+      if (displayRoundInput === '') setDisplayRoundInput(String(state.displayRound ?? state.currentRound))
+      if (state.voting) {
+        setVotingOptionA(state.voting.optionA || 'Support')
+        setVotingOptionB(state.voting.optionB || 'Fight')
+        setVotingDeadline(state.voting.deadline || '')
+      }
+      if (gameTitleInput === '' && state.gameTitle) setGameTitleInput(state.gameTitle)
     }
   }, [state])
 
@@ -267,6 +291,20 @@ export default function AdminPage() {
             {t==='round' && state.pendingRound ? '⏳ Review' : t.charAt(0).toUpperCase()+t.slice(1)}
           </button>
         ))}
+        <button onClick={() => setTab('voting')}
+          style={{ padding:'8px 16px', fontSize:11, letterSpacing:'0.1em', textTransform:'uppercase',
+            background:'transparent', border:'none', cursor:'pointer', fontFamily:'inherit',
+            color: tab==='voting' ? '#e8a020' : 'var(--text-dim)',
+            borderBottom: tab==='voting' ? '2px solid #e8a020' : '2px solid transparent' }}>
+          Voting {state.votingTabOpen ? '●' : ''}
+        </button>
+        <button onClick={() => setTab('newsbox')}
+          style={{ padding:'8px 16px', fontSize:11, letterSpacing:'0.1em', textTransform:'uppercase',
+            background:'transparent', border:'none', cursor:'pointer', fontFamily:'inherit',
+            color: tab==='newsbox' ? 'var(--green)' : 'var(--text-dim)',
+            borderBottom: tab==='newsbox' ? '2px solid var(--green)' : '2px solid transparent' }}>
+          Newsbox {state.newsboxTabOpen ? '●' : ''}
+        </button>
       </div>
 
       {/* ── ROSTER TAB ── */}
@@ -633,6 +671,160 @@ export default function AdminPage() {
                 </div>
               </div>
             ))}
+        </div>
+      )}
+
+
+      {/* ── VOTING TAB ── */}
+      {tab==='voting' && (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+          <div className="card" style={{ padding:16 }}>
+            <div className="label" style={{ marginBottom:12 }}>Voting Settings</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+              <div>
+                <div className="label" style={{ marginBottom:4, fontSize:9 }}>Game Title (replaces HAWK / DOVE in headers)</div>
+                <div style={{ display:'flex', gap:8 }}>
+                  <input className="input" style={{ flex:1 }} placeholder="e.g. Support / Fight" value={gameTitleInput} onChange={e => setGameTitleInput(e.target.value)} />
+                  <button className="btn btn-ghost" style={{ padding:'5px 12px', fontSize:11 }} onClick={() => act('set_game_title', { title: gameTitleInput })}>Set</button>
+                  <button className="btn btn-ghost" style={{ padding:'5px 12px', fontSize:11 }} onClick={() => { setGameTitleInput(''); act('set_game_title', { title: '' }) }}>Clear</button>
+                </div>
+                <div style={{ fontSize:10, color:'var(--text-dim)', marginTop:4 }}>Format: "OptionA / OptionB" — leave blank to show HAWK / DOVE</div>
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                <div>
+                  <div className="label" style={{ marginBottom:4, fontSize:9 }}>Option A Label</div>
+                  <input className="input" value={votingOptionA} onChange={e => setVotingOptionA(e.target.value)} />
+                </div>
+                <div>
+                  <div className="label" style={{ marginBottom:4, fontSize:9 }}>Option B Label</div>
+                  <input className="input" value={votingOptionB} onChange={e => setVotingOptionB(e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <div className="label" style={{ marginBottom:4, fontSize:9 }}>Voting Deadline (YYYY-MM-DD HH:MM)</div>
+                <input className="input" placeholder="2026-05-01 23:59" value={votingDeadline} onChange={e => setVotingDeadline(e.target.value)} />
+              </div>
+              <button className="btn btn-gold" style={{ padding:8 }} onClick={() => act('update_voting', { optionA: votingOptionA, optionB: votingOptionB, deadline: votingDeadline })}>
+                Save Voting Settings
+              </button>
+              <hr style={{ border:'none', borderTop:'1px solid var(--border)' }} />
+              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                <button className="btn" style={{ borderColor: state.votingTabOpen ? 'var(--hawk)' : 'var(--green)', color: state.votingTabOpen ? 'var(--hawk)' : 'var(--green)', padding:'7px 14px', fontSize:11 }}
+                  onClick={() => act('toggle_voting_tab')}>
+                  {state.votingTabOpen ? '✕ Hide Vote Tab' : '▶ Show Vote Tab'}
+                </button>
+                <button className="btn" style={{ borderColor: state.voting?.open ? 'var(--hawk)' : 'var(--dove)', color: state.voting?.open ? 'var(--hawk)' : 'var(--dove)', padding:'7px 14px', fontSize:11 }}
+                  onClick={() => act('update_voting', { open: !state.voting?.open })}>
+                  {state.voting?.open ? '✕ Close Voting' : '▶ Open Voting'}
+                </button>
+                <button className="btn btn-gold" style={{ padding:'7px 14px', fontSize:11 }} onClick={() => act('reveal_results')}>Reveal Results</button>
+                <button className="btn btn-ghost" style={{ padding:'7px 14px', fontSize:11 }} onClick={() => { if (confirm('Clear all votes?')) act('clear_votes') }}>Clear Votes</button>
+              </div>
+            </div>
+          </div>
+          <div className="card" style={{ padding:16 }}>
+            <div className="label" style={{ marginBottom:12 }}>Live Results (hidden from students until revealed)</div>
+            {(() => {
+              const optA = state.voting?.optionA || 'Support'
+              const optB = state.voting?.optionB || 'Fight'
+              const votesA = state.students.filter(s => s.voteChoice === 'a').length
+              const votesB = state.students.filter(s => s.voteChoice === 'b').length
+              const total = votesA + votesB
+              return (
+                <div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
+                    <div style={{ background:'#1e1408', border:'1px solid #3a1800', padding:14, textAlign:'center' }}>
+                      <div style={{ fontSize:26, fontWeight:500, color:'#e8a020' }}>{votesA}</div>
+                      <div style={{ fontSize:11, color:'#e8a020', marginTop:3, letterSpacing:'0.1em' }}>{optA}</div>
+                    </div>
+                    <div style={{ background:'#0e0d20', border:'1px solid #1a1840', padding:14, textAlign:'center' }}>
+                      <div style={{ fontSize:26, fontWeight:500, color:'#7F77DD' }}>{votesB}</div>
+                      <div style={{ fontSize:11, color:'#7F77DD', marginTop:3, letterSpacing:'0.1em' }}>{optB}</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize:11, color:'var(--text-dim)' }}>{state.students.length} eligible · {total} voted · {state.students.length - total} remaining</div>
+                  <div style={{ marginTop:10, height:6, background:'var(--border)', position:'relative' }}>
+                    <div style={{ height:'100%', background:'#e8a020', width:`${total > 0 ? (votesA/total)*100 : 50}%`, transition:'width 0.5s' }} />
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between', fontSize:10, color:'var(--text-dim)', marginTop:4 }}>
+                    <span>{total > 0 ? Math.round(votesA/total*100) : 0}% {optA}</span>
+                    <span>{total > 0 ? Math.round(votesB/total*100) : 0}% {optB}</span>
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* ── NEWSBOX TAB ── */}
+      {tab==='newsbox' && (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+          <div className="card" style={{ padding:16 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+              <div className="label">Post to Newsbox</div>
+              <button className="btn" style={{ borderColor: state.newsboxTabOpen ? 'var(--hawk)' : 'var(--green)', color: state.newsboxTabOpen ? 'var(--hawk)' : 'var(--green)', padding:'4px 10px', fontSize:10 }}
+                onClick={() => act('toggle_newsbox_tab')}>
+                {state.newsboxTabOpen ? '✕ Hide Newsbox Tab' : '▶ Show Newsbox Tab'}
+              </button>
+            </div>
+            <div style={{ display:'flex', gap:4, marginBottom:8, flexWrap:'wrap', alignItems:'center' }}>
+              {[['B','bold'],['I','italic'],['U','underline']].map(([label, cmd]) => (
+                <button key={cmd} className="btn btn-ghost" style={{ padding:'3px 9px', fontSize:12 }}
+                  onClick={() => { document.execCommand(cmd, false); newsEditorRef?.focus() }}>
+                  <span style={{ fontStyle: cmd==='italic'?'italic':'normal', textDecoration: cmd==='underline'?'underline':'none', fontWeight: cmd==='bold'?700:400 }}>{label}</span>
+                </button>
+              ))}
+              <button className="btn btn-ghost" style={{ padding:'3px 9px', fontSize:12, background:'var(--gold-bg)', borderColor:'var(--gold)', color:'var(--gold)' }}
+                onClick={() => {
+                  const sel = window.getSelection()
+                  if (!sel?.rangeCount || sel.isCollapsed) return
+                  const range = sel.getRangeAt(0)
+                  const span = document.createElement('span')
+                  span.style.cssText = 'background:#3a2a00;color:#e8a020;padding:0 2px;'
+                  try { range.surroundContents(span) } catch(e) {}
+                  newsEditorRef?.focus()
+                }}>H</button>
+              <button className="btn btn-ghost" style={{ padding:'3px 9px', fontSize:10 }} onClick={() => { document.execCommand('removeFormat'); newsEditorRef?.focus() }}>Clear</button>
+              <span style={{ fontSize:10, color:'var(--text-dim)', marginLeft:4 }}>Select text then format</span>
+            </div>
+            <div
+              ref={el => setNewsEditorRef(el)}
+              contentEditable
+              suppressContentEditableWarning
+              className="input"
+              data-placeholder="Write a message to students..."
+              style={{ minHeight:80, padding:'8px 10px', lineHeight:1.7, fontSize:12, outline:'none' }}
+              onInput={e => setNewsEditor((e.target as HTMLDivElement).innerHTML)}
+            />
+            <div style={{ marginTop:8, padding:'8px 10px', background:'var(--bg-raised)', border:'1px solid var(--border)', minHeight:36 }}>
+              <div className="label" style={{ marginBottom:3 }}>Preview</div>
+              <div style={{ fontSize:12, lineHeight:1.7 }} dangerouslySetInnerHTML={{ __html: newsEditor || '<span style="color:var(--text-dim)">Nothing yet...</span>' }} />
+            </div>
+            <div style={{ display:'flex', justifyContent:'flex-end', marginTop:10 }}>
+              <button className="btn btn-dove" onClick={async () => {
+                const html = newsEditorRef?.innerHTML?.trim()
+                if (!html || html === '<br>') return
+                await act('post_news', { html })
+                if (newsEditorRef) newsEditorRef.innerHTML = ''
+                setNewsEditor('')
+              }}>Post →</button>
+            </div>
+          </div>
+          <div className="card" style={{ padding:16 }}>
+            <div className="label" style={{ marginBottom:12 }}>Posted Messages</div>
+            {!state.newsItems || state.newsItems.length === 0
+              ? <div style={{ fontSize:12, color:'var(--text-dim)' }}>No posts yet.</div>
+              : state.newsItems.map(item => (
+                <div key={item.id} style={{ padding:'10px 0', borderBottom:'1px solid var(--border)' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
+                    <div style={{ fontSize:12, lineHeight:1.7, flex:1 }} dangerouslySetInnerHTML={{ __html: item.html }} />
+                    <button className="btn btn-danger" style={{ padding:'2px 8px', fontSize:10, flexShrink:0 }} onClick={() => act('delete_news', { id: item.id })}>✕</button>
+                  </div>
+                  <div style={{ fontSize:10, color:'var(--text-dim)', marginTop:4 }}>{new Date(item.createdAt).toLocaleString()}</div>
+                </div>
+              ))}
+          </div>
         </div>
       )}
 
