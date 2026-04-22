@@ -20,7 +20,7 @@ interface GameInfo {
   gameTitle?: string
   votingTabOpen: boolean; newsboxTabOpen: boolean
   newsItems: NewsItem[]
-  voting: { open: boolean; optionA: string; optionB: string; deadline: string; resultsRevealed: boolean }
+  voting: { open: boolean; optionA: string; optionB: string; deadline: string; resultsRevealed: boolean; presidentId?: string; presidentTitle?: string }
   students: StudentInfo[]
   lastRound: RoundRecord | null
   rounds?: RoundRecord[]
@@ -262,6 +262,26 @@ export default function DisplayPage() {
         {tab === 'vote' && (
           <div style={{ display:'grid', gridTemplateColumns:'1fr 300px', gap:20 }}>
             <div style={{ maxWidth:520 }}>
+  {/* President banner */}
+              {game.voting.presidentId && (() => {
+                const president = game.students.find(s => s.id === game.voting.presidentId)
+                if (!president) return null
+                return (
+                  <div style={{ marginBottom:22, padding:'20px 24px', background:'var(--bg-card)', border:'1px solid var(--border-hi)', position:'relative', overflow:'hidden' }}>
+                    <div style={{ position:'absolute', inset:0, background:'linear-gradient(135deg, rgba(232,160,32,0.04) 0%, transparent 60%)', pointerEvents:'none' }} />
+                    <div style={{ fontSize:9, letterSpacing:'0.25em', color:'var(--text-dim)', marginBottom:8, textTransform:'uppercase' }}>Candidate</div>
+                    <div style={{ fontSize:26, fontWeight:500, color:'var(--text)', marginBottom: game.voting.presidentTitle ? 4 : 8 }}>
+                      {president.name.includes(',') ? president.name.split(',').slice(1).join(',').trim() + ' ' + president.name.split(',')[0] : president.name}
+                    </div>
+                    {game.voting.presidentTitle && (
+                      <div style={{ fontSize:12, color:'var(--gold)', letterSpacing:'0.1em', marginBottom:8, textTransform:'uppercase' }}>{game.voting.presidentTitle}</div>
+                    )}
+                    <div style={{ fontSize:13, color:'var(--text-dim)' }}>
+                      <span style={{ color:'var(--gold)', fontWeight:500 }}>{fmt(president.points)}</span> pts
+                    </div>
+                  </div>
+                )
+              })()}
               <div style={{ fontSize:16, fontWeight:500, marginBottom:6 }}>Cast your vote</div>
               <div style={{ fontSize:11, color:'var(--text-dim)', marginBottom:18, lineHeight:1.9, letterSpacing:'0.03em' }}>
                 You may vote once. Enter your registered email to confirm your identity.<br/>
