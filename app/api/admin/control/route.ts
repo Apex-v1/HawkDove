@@ -50,6 +50,13 @@ export async function POST(req: NextRequest) {
         const record = await computeRound()
         return NextResponse.json({ ok:true, record, state: await getState() })
       }
+      case 'cancel_round': {
+        const s = await getState()
+        s.pendingRound = undefined
+        s.roundOpen = false
+        await kvSave(s)
+        return NextResponse.json({ ok:true, state: await getState() })
+      }
       case 'set_week': {
         const s = await getState(); s.week = payload.week
         await kvSave(s)
