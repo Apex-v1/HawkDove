@@ -86,6 +86,8 @@ export default function AdminPage() {
   const [votingOptionA, setVotingOptionA] = useState('Support')
   const [votingOptionB, setVotingOptionB] = useState('Fight')
   const [votingDeadline, setVotingDeadline] = useState('')
+  const [presidentId, setPresidentId] = useState('')
+  const [presidentTitle, setPresidentTitle] = useState('')
   const [gameTitleInput, setGameTitleInput] = useState('')
   // Newsbox state
   const [newsEditor, setNewsEditor] = useState('')
@@ -690,6 +692,17 @@ export default function AdminPage() {
                 </div>
                 <div style={{ fontSize:10, color:'var(--text-dim)', marginTop:4 }}>Format: "OptionA / OptionB" — leave blank to show HAWK / DOVE</div>
               </div>
+              <div>
+                <div className="label" style={{ marginBottom:4, fontSize:9 }}>Candidate / President</div>
+                <select className="input" value={presidentId} onChange={e => setPresidentId(e.target.value)}>
+                  <option value="">— No candidate selected —</option>
+                  {state.students.map(s => <option key={s.id} value={s.id}>{s.name} ({fmt(s.points)} pts)</option>)}
+                </select>
+              </div>
+              <div>
+                <div className="label" style={{ marginBottom:4, fontSize:9 }}>Candidate Title (optional, shown under name)</div>
+                <input className="input" placeholder="e.g. The Hawk, Incumbent, Challenger..." value={presidentTitle} onChange={e => setPresidentTitle(e.target.value)} />
+              </div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
                 <div>
                   <div className="label" style={{ marginBottom:4, fontSize:9 }}>Option A Label</div>
@@ -704,7 +717,7 @@ export default function AdminPage() {
                 <div className="label" style={{ marginBottom:4, fontSize:9 }}>Voting Deadline (YYYY-MM-DD HH:MM)</div>
                 <input className="input" placeholder="2026-05-01 23:59" value={votingDeadline} onChange={e => setVotingDeadline(e.target.value)} />
               </div>
-              <button className="btn btn-gold" style={{ padding:8 }} onClick={() => act('update_voting', { optionA: votingOptionA, optionB: votingOptionB, deadline: votingDeadline })}>
+              <button className="btn btn-gold" style={{ padding:8 }} onClick={() => act('update_voting', { optionA: votingOptionA, optionB: votingOptionB, deadline: votingDeadline, presidentId, presidentTitle })}>
                 Save Voting Settings
               </button>
               <hr style={{ border:'none', borderTop:'1px solid var(--border)' }} />
