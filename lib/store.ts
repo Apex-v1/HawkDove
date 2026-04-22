@@ -15,6 +15,7 @@ export interface Student {
   isHawkInStaple?: boolean
   stapleTransferAmount?: number
   isEliminated: boolean
+  voteChoice?: string
   roundHistory: { round: number; type: string; pair: string; result: string }[]
 }
 
@@ -33,11 +34,31 @@ export interface RoundRecord {
   computedAt: string; finalizedAt?: string
 }
 
+export interface NewsItem {
+  id: string
+  html: string
+  createdAt: string
+}
+
+export interface VotingState {
+  open: boolean
+  optionA: string
+  optionB: string
+  deadline: string
+  resultsRevealed: boolean
+  votedEmails: string[]
+}
+
 export interface GameState {
   week: Week; currentRound: number
   students: Student[]; rounds: RoundRecord[]
   roundOpen: boolean; displayRound?: number; pendingRound?: RoundRecord
   adminPassword: string
+  gameTitle?: string
+  voting: VotingState
+  votingTabOpen: boolean
+  newsboxTabOpen: boolean
+  newsItems: NewsItem[]
 }
 
 const KV_KEY = 'hd_game_state_v3'
@@ -48,6 +69,11 @@ function makeDefault(): GameState {
     week: 1, currentRound: 0, students: [], rounds: [],
     roundOpen: false,
     adminPassword: process.env.ADMIN_PASSWORD || 'hawk2024admin',
+    gameTitle: '',
+    voting: { open: false, optionA: 'Support', optionB: 'Fight', deadline: '', resultsRevealed: false, votedEmails: [] },
+    votingTabOpen: false,
+    newsboxTabOpen: false,
+    newsItems: [],
   }
 }
 
@@ -71,10 +97,14 @@ async function kvSet(state: GameState): Promise<void> {
 }
 
 export async function getState(): Promise<GameState> {
-  _mem = null  // ← add this line
+  _mem = null
   const persisted = await kvGet()
   if (persisted) {
     persisted.adminPassword = process.env.ADMIN_PASSWORD || 'hawk2024admin'
+    if (!persisted.voting) persisted.voting = makeDefault().voting
+    if (!persisted.newsItems) persisted.newsItems = []
+    if (persisted.votingTabOpen === undefined) persisted.votingTabOpen = false
+    if (persisted.newsboxTabOpen === undefined) persisted.newsboxTabOpen = false
     _mem = persisted
     return _mem
   }
@@ -164,6 +194,19 @@ export async function submitChoice(studentId: string, choice: Choice): Promise<b
   return true
 }
 
+export async function submitVote(email: string, choice: string): Promise<{ ok: boolean; error?: string }> {
+  const s = await getState()
+  if (!s.voting.open) return { ok: false, error: 'Voting is not currently open.' }
+  const normalizedEmail = email.trim().toLowerCase()
+  if (s.voting.votedEmails.includes(normalizedEmail)) return { ok: false, error: 'This email has already voted.' }
+  const student = s.students.find(x => x.email.toLowerCase() === normalizedEmail)
+  if (!student) return { ok: false, error: 'Email not found in roster. Contact your instructor.' }
+  student.voteChoice = choice
+  s.voting.votedEmails.push(normalizedEmail)
+  await save()
+  return { ok: true }
+}
+
 export async function computeRound(): Promise<RoundRecord> {
   const s = await getState()
   const snapshotBefore: Record<string, number> = {}
@@ -206,20 +249,20 @@ export async function computeRound(): Promise<RoundRecord> {
     let type: PairType, diceRoll: number | undefined, coinFlip: string | undefined
 
     if (ca === 'hawk' && cb === 'hawk') {
-  type = 'H+H'
-  const aTb = a.tiebreaker ?? 0
-  const bTb = b.tiebreaker ?? 0
-if (aTb > bTb) {
-    aDelta = b.points; bDelta = -b.points
-    note = `${a.name} > ${b.name} — higher tiebreaker takes all`
-  } else if (bTb > aTb) {
-    bDelta = a.points; aDelta = -a.points
-    note = `${b.name} > ${a.name} — higher tiebreaker takes all`
-  } else {
-    coinFlip = Math.random() > 0.5 ? 'heads' : 'tails'
-    if (coinFlip === 'heads') { aDelta = b.points; bDelta = -b.points; note = `Tied — coin flip heads → ${a.name} wins` }
-    else { bDelta = a.points; aDelta = -a.points; note = `Tied — coin flip tails → ${b.name} wins` }
-  }
+      type = 'H+H'
+      const aTb = a.tiebreaker ?? 0
+      const bTb = b.tiebreaker ?? 0
+      if (aTb > bTb) {
+        aDelta = b.points; bDelta = -b.points
+        note = `${a.name} > ${b.name} — higher tiebreaker takes all`
+      } else if (bTb > aTb) {
+        bDelta = a.points; aDelta = -a.points
+        note = `${b.name} > ${a.name} — higher tiebreaker takes all`
+      } else {
+        coinFlip = Math.random() > 0.5 ? 'heads' : 'tails'
+        if (coinFlip === 'heads') { aDelta = b.points; bDelta = -b.points; note = `Tied — coin flip heads → ${a.name} wins` }
+        else { bDelta = a.points; aDelta = -a.points; note = `Tied — coin flip tails → ${b.name} wins` }
+      }
     } else if (ca === 'dove' && cb === 'dove') {
       type = 'D+D'
       const aDiceRoll = Math.floor(Math.random() * 20) + 1
@@ -284,8 +327,6 @@ export async function finalizeRound(): Promise<RoundRecord> {
     const b = s.students.find(x => x.id === p.bId)!
     a.points = Math.round((a.points + p.aDelta) * 100) / 100
     b.points = Math.round((b.points + p.bDelta) * 100) / 100
-    // Auto-elimination disabled — use admin panel to manually eliminate players
-    // append to round history
     const pa = s.students.find(x => x.id === p.aId)!
     const pb = s.students.find(x => x.id === p.bId)!
     pa.roundHistory = pa.roundHistory || []
