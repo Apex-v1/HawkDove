@@ -1,6 +1,6 @@
 # 🦅🕊️ Jesse Driscoll's HAWK / DOVE
 A real-time game theory experiment for the classroom.
-
+Created and edited by Jesús E. Rojas Venzor based on notes from Jesse Driscoll.
 ---
 
 ## Three Interfaces
