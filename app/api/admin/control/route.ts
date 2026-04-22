@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { checkAdmin, getState, loadRoster, setStaple, removeStaple, setStapleTransfer, updateStudent, openRound, closeRound, computeRound, finalizeRound, resetState, setDisplayRound } from '@/lib/store'
+import { checkAdmin, getState, loadRoster, setStaple, removeStaple, setStapleTransfer,
+  updateStudent, openRound, closeRound, computeRound, finalizeRound, resetState,
+  setDisplayRound, submitVote } from '@/lib/store'
 export const dynamic = 'force-dynamic'
 
 async function auth(req: NextRequest) {
@@ -35,20 +37,13 @@ export async function POST(req: NextRequest) {
       case 'override_choice': {
         const s = await getState()
         const st = s.students.find(x => x.id === payload.id)
-        if (st) {
-          st.choice = payload.choice || undefined
-          st.hasChosen = !!payload.choice
-          await kvSave(s)
-        }
+        if (st) { st.choice = payload.choice || undefined; st.hasChosen = !!payload.choice; await kvSave(s) }
         return NextResponse.json({ ok:true, state: await getState() })
       }
       case 'toggle_eliminated': {
         const s = await getState()
         const st = s.students.find(x => x.id === payload.id)
-        if (st) {
-          st.isEliminated = !st.isEliminated
-          await kvSave(s)
-        }
+        if (st) { st.isEliminated = !st.isEliminated; await kvSave(s) }
         return NextResponse.json({ ok:true, state: await getState() })
       }
       case 'rerandomize': {
@@ -97,6 +92,58 @@ export async function POST(req: NextRequest) {
           tiebreaker: payload.tiebreaker as number, points: payload.points as number,
           hasChosen: false, isEliminated: false, roundHistory: [],
         })
+        await kvSave(s)
+        return NextResponse.json({ ok:true, state: await getState() })
+      }
+      // ── VOTING ──
+      case 'update_voting': {
+        const s = await getState()
+        s.voting = { ...s.voting, ...payload }
+        await kvSave(s)
+        return NextResponse.json({ ok:true, state: await getState() })
+      }
+      case 'toggle_voting_tab': {
+        const s = await getState()
+        s.votingTabOpen = !s.votingTabOpen
+        await kvSave(s)
+        return NextResponse.json({ ok:true, state: await getState() })
+      }
+      case 'reveal_results': {
+        const s = await getState()
+        s.voting.resultsRevealed = true
+        await kvSave(s)
+        return NextResponse.json({ ok:true, state: await getState() })
+      }
+      case 'clear_votes': {
+        const s = await getState()
+        s.voting.votedEmails = []
+        s.students.forEach(st => { st.voteChoice = undefined })
+        await kvSave(s)
+        return NextResponse.json({ ok:true, state: await getState() })
+      }
+      // ── NEWSBOX ──
+      case 'toggle_newsbox_tab': {
+        const s = await getState()
+        s.newsboxTabOpen = !s.newsboxTabOpen
+        await kvSave(s)
+        return NextResponse.json({ ok:true, state: await getState() })
+      }
+      case 'post_news': {
+        const s = await getState()
+        s.newsItems.unshift({ id: `n_${Date.now()}`, html: payload.html as string, createdAt: new Date().toISOString() })
+        await kvSave(s)
+        return NextResponse.json({ ok:true, state: await getState() })
+      }
+      case 'delete_news': {
+        const s = await getState()
+        s.newsItems = s.newsItems.filter(n => n.id !== payload.id)
+        await kvSave(s)
+        return NextResponse.json({ ok:true, state: await getState() })
+      }
+      // ── GAME TITLE ──
+      case 'set_game_title': {
+        const s = await getState()
+        s.gameTitle = payload.title as string
         await kvSave(s)
         return NextResponse.json({ ok:true, state: await getState() })
       }
