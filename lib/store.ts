@@ -40,6 +40,14 @@ export interface NewsItem {
   createdAt: string
 }
 
+export interface ArchiveArticle {
+  id: string
+  headline: string
+  body: string
+  pullQuote?: string
+  createdAt: string
+}
+
 export interface VotingState {
   open: boolean
   optionA: string
@@ -61,6 +69,9 @@ export interface GameState {
   votingTabOpen: boolean
   newsboxTabOpen: boolean
   newsItems: NewsItem[]
+  gazetteTabOpen: boolean
+  archiveTabOpen: boolean
+  archiveArticles: ArchiveArticle[]
 }
 
 const KV_KEY = 'hd_game_state_v3'
@@ -76,6 +87,9 @@ function makeDefault(): GameState {
     votingTabOpen: false,
     newsboxTabOpen: false,
     newsItems: [],
+    gazetteTabOpen: false,
+    archiveTabOpen: false,
+    archiveArticles: [],
   }
 }
 
@@ -107,6 +121,9 @@ export async function getState(): Promise<GameState> {
     if (!persisted.newsItems) persisted.newsItems = []
     if (persisted.votingTabOpen === undefined) persisted.votingTabOpen = false
     if (persisted.newsboxTabOpen === undefined) persisted.newsboxTabOpen = false
+    if (persisted.gazetteTabOpen === undefined) persisted.gazetteTabOpen = false
+    if (persisted.archiveTabOpen === undefined) persisted.archiveTabOpen = false
+    if (!persisted.archiveArticles) persisted.archiveArticles = []
     _mem = persisted
     return _mem
   }
