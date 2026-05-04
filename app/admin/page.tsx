@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 
-type Tab = 'roster' | 'round' | 'history' | 'insights' | 'voting' | 'newsbox'
+type Tab = 'roster' | 'round' | 'history' | 'insights' | 'voting' | 'newsbox' | 'gazette'
 
 interface Student {
   id: string; name: string; email: string; tiebreaker: number; points: number
@@ -20,6 +20,7 @@ interface RoundRecord {
   computedAt: string; finalizedAt?: string
 }
 interface NewsItem { id: string; html: string; createdAt: string }
+interface ArchiveArticle { id: string; headline: string; body: string; pullQuote?: string; createdAt: string }
 interface VotingState { open: boolean; optionA: string; optionB: string; deadline: string; resultsRevealed: boolean; votedEmails: string[] }
 interface GameState {
   week: number; currentRound: number; displayRound?: number; students: Student[]
@@ -29,6 +30,9 @@ interface GameState {
   votingTabOpen: boolean
   newsboxTabOpen: boolean
   newsItems: NewsItem[]
+  gazetteTabOpen: boolean
+  archiveTabOpen: boolean
+  archiveArticles: ArchiveArticle[]
 }
 
 function fmt(n: number) {
@@ -92,6 +96,10 @@ export default function AdminPage() {
   // Newsbox state
   const [newsEditor, setNewsEditor] = useState('')
   const [newsEditorRef, setNewsEditorRef] = useState<HTMLDivElement|null>(null)
+  const [archiveHeadline, setArchiveHeadline] = useState('')
+  const [archiveBody, setArchiveBody] = useState('')
+  const [archivePullQuote, setArchivePullQuote] = useState('')
+  const [archiveSaved, setArchiveSaved] = useState(false)
 
   const fetchState = useCallback(async () => {
     const res = await fetch('/api/admin/control', { cache: 'no-store' })
@@ -310,6 +318,13 @@ export default function AdminPage() {
             color: tab==='newsbox' ? 'var(--green)' : 'var(--text-dim)',
             borderBottom: tab==='newsbox' ? '2px solid var(--green)' : '2px solid transparent' }}>
           Newsbox {state.newsboxTabOpen ? '●' : ''}
+        </button>
+        <button onClick={() => setTab('gazette')}
+          style={{ padding:'8px 16px', fontSize:11, letterSpacing:'0.1em', textTransform:'uppercase',
+            background:'transparent', border:'none', cursor:'pointer', fontFamily:'inherit',
+            color: tab==='gazette' ? '#c8b890' : 'var(--text-dim)',
+            borderBottom: tab==='gazette' ? '2px solid #c8b890' : '2px solid transparent' }}>
+          Gazette {(state.gazetteTabOpen||state.archiveTabOpen) ? '●' : ''}
         </button>
       </div>
 
@@ -846,6 +861,82 @@ export default function AdminPage() {
                 </div>
               ))}
           </div>
+        </div>
+      )}
+
+
+      {/* ── GAZETTE TAB ── */}
+      {tab==='gazette' && (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+          {/* Gazette controls */}
+          <div className="card" style={{ padding:16 }}>
+            <div className="label" style={{ marginBottom:12 }}>The Gazette — Auto-generated from game data</div>
+            <div style={{ fontSize:12, color:'var(--text-dim)', lineHeight:1.7, marginBottom:14 }}>
+              The Gazette automatically generates a newspaper page for each finalized round plus a final edition, using real game data — pairings, points, transfers, standings. No writing required.
+            </div>
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+              <button className="btn" style={{ borderColor: state.gazetteTabOpen ? 'var(--hawk)' : '#c8b890', color: state.gazetteTabOpen ? 'var(--hawk)' : '#c8b890', padding:'7px 14px', fontSize:11 }}
+                onClick={() => act('toggle_gazette_tab')}>
+                {state.gazetteTabOpen ? '✕ Hide Gazette Tab' : '▶ Show Gazette Tab'}
+              </button>
+            </div>
+            <div style={{ marginTop:12, fontSize:11, color:'var(--text-dim)' }}>
+              {state.rounds?.length || 0} rounds available · {(state.rounds?.length||0) + 1} pages will be generated
+            </div>
+          </div>
+
+          {/* Archive controls */}
+          <div className="card" style={{ padding:16 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+              <div className="label">The Archive — Instructor-written articles</div>
+              <button className="btn" style={{ borderColor: state.archiveTabOpen ? 'var(--hawk)' : '#8a9ab0', color: state.archiveTabOpen ? 'var(--hawk)' : '#8a9ab0', padding:'4px 10px', fontSize:10 }}
+                onClick={() => act('toggle_archive_tab')}>
+                {state.archiveTabOpen ? '✕ Hide Archive Tab' : '▶ Show Archive Tab'}
+              </button>
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+              <div>
+                <div className="label" style={{ marginBottom:4, fontSize:9 }}>Headline</div>
+                <input className="input" style={{ fontSize:12 }} placeholder="e.g. The Legacy Statements" value={archiveHeadline} onChange={e => setArchiveHeadline(e.target.value)} />
+              </div>
+              <div>
+                <div className="label" style={{ marginBottom:4, fontSize:9 }}>Body Text</div>
+                <textarea className="input" style={{ minHeight:100, padding:'8px 10px', fontSize:11, lineHeight:1.6, resize:'vertical' }}
+                  placeholder="Write the full article body here. Legacy statements, narrative, analysis..." value={archiveBody} onChange={e => setArchiveBody(e.target.value)} />
+              </div>
+              <div>
+                <div className="label" style={{ marginBottom:4, fontSize:9 }}>Pull Quote (optional — appears in sidebar)</div>
+                <input className="input" style={{ fontSize:12 }} placeholder={'"A memorable quote from the article..."'} value={archivePullQuote} onChange={e => setArchivePullQuote(e.target.value)} />
+              </div>
+              <button className={`btn ${archiveSaved ? 'btn-dove' : 'btn-gold'}`} style={{ padding:8 }}
+                onClick={async () => {
+                  if (!archiveHeadline.trim() || !archiveBody.trim()) return
+                  await act('post_archive', { headline: archiveHeadline, body: archiveBody, pullQuote: archivePullQuote })
+                  setArchiveHeadline(''); setArchiveBody(''); setArchivePullQuote('')
+                  setArchiveSaved(true); setTimeout(() => setArchiveSaved(false), 2000)
+                }}>
+                {archiveSaved ? '✓ Published' : 'Publish to Archive →'}
+              </button>
+            </div>
+          </div>
+
+          {/* Archive article list */}
+          {state.archiveArticles && state.archiveArticles.length > 0 && (
+            <div className="card" style={{ padding:16, gridColumn:'1/-1' }}>
+              <div className="label" style={{ marginBottom:12 }}>Published Archive Articles ({state.archiveArticles.length})</div>
+              {state.archiveArticles.map((article: ArchiveArticle) => (
+                <div key={article.id} style={{ padding:'10px 0', borderBottom:'1px solid var(--border)', display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:13, fontWeight:500, color:'var(--text)', marginBottom:3 }}>{article.headline}</div>
+                    <div style={{ fontSize:11, color:'var(--text-dim)', lineHeight:1.5 }}>{article.body.slice(0,120)}{article.body.length > 120 ? '...' : ''}</div>
+                    {article.pullQuote && <div style={{ fontSize:11, color:'var(--gold)', fontStyle:'italic', marginTop:3 }}>"{article.pullQuote}"</div>}
+                    <div style={{ fontSize:10, color:'var(--text-dim)', marginTop:4 }}>{new Date(article.createdAt).toLocaleString()}</div>
+                  </div>
+                  <button className="btn btn-danger" style={{ padding:'2px 8px', fontSize:10, flexShrink:0 }} onClick={() => act('delete_archive', { id: article.id })}>✕</button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
