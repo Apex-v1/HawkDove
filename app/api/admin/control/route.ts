@@ -154,6 +154,32 @@ export async function POST(req: NextRequest) {
         await kvSave(s)
         return NextResponse.json({ ok:true, state: await getState() })
       }
+      // ── GAZETTE ──
+      case 'toggle_gazette_tab': {
+        const s = await getState()
+        s.gazetteTabOpen = !s.gazetteTabOpen
+        await kvSave(s)
+        return NextResponse.json({ ok:true, state: await getState() })
+      }
+      case 'toggle_archive_tab': {
+        const s = await getState()
+        s.archiveTabOpen = !s.archiveTabOpen
+        await kvSave(s)
+        return NextResponse.json({ ok:true, state: await getState() })
+      }
+      case 'post_archive': {
+        const s = await getState()
+        if (!s.archiveArticles) s.archiveArticles = []
+        s.archiveArticles.unshift({ id: `a_${Date.now()}`, headline: payload.headline as string, body: payload.body as string, pullQuote: payload.pullQuote as string || '', createdAt: new Date().toISOString() })
+        await kvSave(s)
+        return NextResponse.json({ ok:true, state: await getState() })
+      }
+      case 'delete_archive': {
+        const s = await getState()
+        s.archiveArticles = s.archiveArticles.filter((a: {id:string}) => a.id !== payload.id)
+        await kvSave(s)
+        return NextResponse.json({ ok:true, state: await getState() })
+      }
       case 'reset': { await resetState(); return NextResponse.json({ ok:true }) }
       default: return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
     }
