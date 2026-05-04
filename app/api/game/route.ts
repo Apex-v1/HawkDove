@@ -12,13 +12,18 @@ export async function GET() {
     gameTitle: s.gameTitle || '',
     votingTabOpen: s.votingTabOpen,
     newsboxTabOpen: s.newsboxTabOpen,
+    gazetteTabOpen: s.gazetteTabOpen,
+    archiveTabOpen: s.archiveTabOpen,
     newsItems: s.newsItems || [],
+    archiveArticles: s.archiveArticles || [],
     voting: {
       open: s.voting.open,
       optionA: s.voting.optionA,
       optionB: s.voting.optionB,
       deadline: s.voting.deadline,
       resultsRevealed: s.voting.resultsRevealed,
+      presidentId: s.voting.presidentId,
+      presidentTitle: s.voting.presidentTitle,
     },
     students: s.students.map(st => ({
       id: st.id, name: st.name, email: st.email,
