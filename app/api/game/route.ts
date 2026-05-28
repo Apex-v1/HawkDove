@@ -24,6 +24,16 @@ export async function GET() {
       resultsRevealed: s.voting.resultsRevealed,
       presidentId: s.voting.presidentId,
       presidentTitle: s.voting.presidentTitle,
+      liveVotesVisible: s.voting.liveVotesVisible ?? false,
+      coupThreshold: s.voting.coupThreshold ?? 10,
+      coupTriggered: s.voting.coupTriggered ?? false,
+      // only expose individual votes if liveVotesVisible is on
+      liveVotes: s.voting.liveVotesVisible
+        ? s.students.filter(st => st.voteChoice).map(st => ({ name: st.name, choice: st.voteChoice }))
+        : [],
+      votesA: s.students.filter(st => st.voteChoice === 'a').length,
+      votesB: s.students.filter(st => st.voteChoice === 'b').length,
+      totalVoted: s.voting.votedEmails.length,
     },
     students: s.students.map(st => ({
       id: st.id, name: st.name, email: st.email,
