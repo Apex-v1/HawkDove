@@ -20,7 +20,7 @@ interface RoundRecord {
   computedAt: string; finalizedAt?: string
 }
 interface NewsItem { id: string; html: string; createdAt: string }
-interface VotingState { open: boolean; optionA: string; optionB: string; deadline: string; resultsRevealed: boolean; votedEmails: string[]; liveVotesVisible?: boolean; coupThreshold?: number; coupTriggered?: boolean }
+interface VotingState { open: boolean; optionA: string; optionB: string; deadline: string; resultsRevealed: boolean; votedEmails: string[] }
 interface GameState {
   week: number; currentRound: number; displayRound?: number; students: Student[]
   rounds: RoundRecord[]; roundOpen: boolean; pendingRound?: RoundRecord
@@ -86,10 +86,14 @@ export default function AdminPage() {
   const [votingOptionA, setVotingOptionA] = useState('Support')
   const [votingOptionB, setVotingOptionB] = useState('Fight')
   const [votingDeadline, setVotingDeadline] = useState('')
+  const [dlYear, setDlYear] = useState('')
+  const [dlMonth, setDlMonth] = useState('')
+  const [dlDay, setDlDay] = useState('')
+  const [dlHour, setDlHour] = useState('')
+  const [dlMin, setDlMin] = useState('')
   const [presidentId, setPresidentId] = useState('')
   const [presidentTitle, setPresidentTitle] = useState('')
   const [gameTitleInput, setGameTitleInput] = useState('')
-  const [coupThresholdInput, setCoupThresholdInput] = useState('10')
   // Newsbox state
   const [newsEditor, setNewsEditor] = useState('')
   const [newsEditorRef, setNewsEditorRef] = useState<HTMLDivElement|null>(null)
@@ -117,7 +121,6 @@ export default function AdminPage() {
         setVotingDeadline(state.voting.deadline || '')
       }
       if (gameTitleInput === '' && state.gameTitle) setGameTitleInput(state.gameTitle)
-        if (state.voting?.coupThreshold !== undefined) setCoupThresholdInput(String(state.voting.coupThreshold))
     }
   }, [state])
 
@@ -724,10 +727,35 @@ export default function AdminPage() {
                 </div>
               </div>
               <div>
-                <div className="label" style={{ marginBottom:4, fontSize:9 }}>Voting Deadline (YYYY-MM-DD HH:MM)</div>
-                <input className="input" placeholder="2026-05-01 23:59" value={votingDeadline} onChange={e => setVotingDeadline(e.target.value)} />
+                <div className="label" style={{ marginBottom:4, fontSize:9 }}>Voting Deadline</div>
+                <div style={{ display:'flex', gap:5, alignItems:'center', flexWrap:'wrap' }}>
+                  <input type="number" className="input" style={{ width:72 }} placeholder="YYYY" value={dlYear}
+                    onChange={e => setDlYear(e.target.value)} min={2024} max={2099} />
+                  <span style={{ color:'var(--text-dim)', fontSize:12 }}>-</span>
+                  <input type="number" className="input" style={{ width:52 }} placeholder="MM" value={dlMonth}
+                    onChange={e => setDlMonth(e.target.value.padStart(2,'0').slice(-2))} min={1} max={12} />
+                  <span style={{ color:'var(--text-dim)', fontSize:12 }}>-</span>
+                  <input type="number" className="input" style={{ width:52 }} placeholder="DD" value={dlDay}
+                    onChange={e => setDlDay(e.target.value.padStart(2,'0').slice(-2))} min={1} max={31} />
+                  <span style={{ color:'var(--text-dim)', fontSize:12 }}>at</span>
+                  <input type="number" className="input" style={{ width:52 }} placeholder="HH" value={dlHour}
+                    onChange={e => setDlHour(e.target.value.padStart(2,'0').slice(-2))} min={0} max={23} />
+                  <span style={{ color:'var(--text-dim)', fontSize:12 }}>:</span>
+                  <input type="number" className="input" style={{ width:52 }} placeholder="MM" value={dlMin}
+                    onChange={e => setDlMin(e.target.value.padStart(2,'0').slice(-2))} min={0} max={59} />
+                </div>
+                {dlYear && dlMonth && dlDay && dlHour && dlMin && (
+                  <div style={{ fontSize:10, color:'var(--text-dim)', marginTop:4 }}>
+                    Deadline: {dlYear}-{dlMonth}-{dlDay} {dlHour}:{dlMin}
+                  </div>
+                )}
               </div>
-              <button className="btn btn-gold" style={{ padding:8 }} onClick={() => act('update_voting', { optionA: votingOptionA, optionB: votingOptionB, deadline: votingDeadline, presidentId, presidentTitle })}>
+              <button className="btn btn-gold" style={{ padding:8 }} onClick={() => {
+                const deadline = (dlYear && dlMonth && dlDay && dlHour && dlMin)
+                  ? `${dlYear}-${dlMonth}-${dlDay} ${dlHour}:${dlMin}`
+                  : votingDeadline
+                act('update_voting', { optionA: votingOptionA, optionB: votingOptionB, deadline, presidentId, presidentTitle })
+              }}>
                 Save Voting Settings
               </button>
               <hr style={{ border:'none', borderTop:'1px solid var(--border)' }} />
@@ -742,30 +770,6 @@ export default function AdminPage() {
                 </button>
                 <button className="btn btn-gold" style={{ padding:'7px 14px', fontSize:11 }} onClick={() => act('reveal_results')}>Reveal Results</button>
                 <button className="btn btn-ghost" style={{ padding:'7px 14px', fontSize:11 }} onClick={() => { if (confirm('Clear all votes?')) act('clear_votes') }}>Clear Votes</button>
-              </div>
-              <hr style={{ border:'none', borderTop:'1px solid var(--border)' }} />
-              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                <div>
-                  <div className="label" style={{ marginBottom:4, fontSize:9 }}>Live Vote Visibility (show who voted what in real time on /display)</div>
-                  <button className="btn" style={{ borderColor: state.voting?.liveVotesVisible ? 'var(--hawk)' : 'var(--green)', color: state.voting?.liveVotesVisible ? 'var(--hawk)' : 'var(--green)', padding:'7px 14px', fontSize:11 }}
-                    onClick={() => act('toggle_live_votes')}>
-                    {state.voting?.liveVotesVisible ? '✕ Hide Live Votes' : '▶ Show Live Votes'}
-                  </button>
-                </div>
-                <div>
-                  <div className="label" style={{ marginBottom:4, fontSize:9 }}>Red Screen Coup Threshold (triggers full-screen alert on /display)</div>
-                  <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                    <input type="number" className="input" style={{ width:80 }} value={coupThresholdInput} onChange={e => setCoupThresholdInput(e.target.value)} min={1} />
-                    <button className="btn btn-ghost" style={{ padding:'5px 12px', fontSize:11 }} onClick={() => act('set_coup_threshold', { threshold: parseInt(coupThresholdInput) || 10 })}>Set</button>
-                    <span style={{ fontSize:11, color:'var(--text-dim)' }}>votes for {state.voting?.optionB || 'Option B'} triggers red screen</span>
-                  </div>
-                </div>
-                {state.voting?.coupTriggered && (
-                  <div style={{ display:'flex', gap:8, alignItems:'center', padding:'10px 14px', background:'rgba(224,48,32,0.08)', border:'1px solid var(--hawk)' }}>
-                    <span style={{ fontSize:12, color:'var(--hawk)' }}>🔴 Red screen is active on /display</span>
-                    <button className="btn btn-ghost" style={{ padding:'4px 10px', fontSize:10, marginLeft:'auto' }} onClick={() => act('reset_coup')}>Dismiss</button>
-                  </div>
-                )}
               </div>
             </div>
           </div>
