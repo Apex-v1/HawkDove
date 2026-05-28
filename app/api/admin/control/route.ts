@@ -154,29 +154,21 @@ export async function POST(req: NextRequest) {
         await kvSave(s)
         return NextResponse.json({ ok:true, state: await getState() })
       }
-      // ── GAZETTE ──
-      case 'toggle_gazette_tab': {
+      case 'toggle_live_votes': {
         const s = await getState()
-        s.gazetteTabOpen = !s.gazetteTabOpen
+        s.voting.liveVotesVisible = !s.voting.liveVotesVisible
         await kvSave(s)
         return NextResponse.json({ ok:true, state: await getState() })
       }
-      case 'toggle_archive_tab': {
+      case 'set_coup_threshold': {
         const s = await getState()
-        s.archiveTabOpen = !s.archiveTabOpen
+        s.voting.coupThreshold = payload.threshold as number
         await kvSave(s)
         return NextResponse.json({ ok:true, state: await getState() })
       }
-      case 'post_archive': {
+      case 'reset_coup': {
         const s = await getState()
-        if (!s.archiveArticles) s.archiveArticles = []
-        s.archiveArticles.unshift({ id: `a_${Date.now()}`, headline: payload.headline as string, body: payload.body as string, pullQuote: payload.pullQuote as string || '', createdAt: new Date().toISOString() })
-        await kvSave(s)
-        return NextResponse.json({ ok:true, state: await getState() })
-      }
-      case 'delete_archive': {
-        const s = await getState()
-        s.archiveArticles = s.archiveArticles.filter((a: {id:string}) => a.id !== payload.id)
+        s.voting.coupTriggered = false
         await kvSave(s)
         return NextResponse.json({ ok:true, state: await getState() })
       }
