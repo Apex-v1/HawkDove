@@ -10,6 +10,7 @@ export async function GET() {
     optionB: s.voting.optionB,
     deadline: s.voting.deadline,
     resultsRevealed: s.voting.resultsRevealed,
+    coupTriggered: s.voting.coupTriggered ?? false,
     gameTitle: s.gameTitle || '',
   })
 }
