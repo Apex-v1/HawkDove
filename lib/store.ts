@@ -57,6 +57,9 @@ export interface VotingState {
   votedEmails: string[]
   presidentId?: string
   presidentTitle?: string
+  liveVotesVisible?: boolean
+  coupThreshold?: number
+  coupTriggered?: boolean
 }
 
 export interface GameState {
