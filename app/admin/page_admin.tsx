@@ -86,6 +86,11 @@ export default function AdminPage() {
   const [votingOptionA, setVotingOptionA] = useState('Support')
   const [votingOptionB, setVotingOptionB] = useState('Fight')
   const [votingDeadline, setVotingDeadline] = useState('')
+  const [dlYear, setDlYear] = useState('')
+  const [dlMonth, setDlMonth] = useState('')
+  const [dlDay, setDlDay] = useState('')
+  const [dlHour, setDlHour] = useState('')
+  const [dlMin, setDlMin] = useState('')
   const [presidentId, setPresidentId] = useState('')
   const [presidentTitle, setPresidentTitle] = useState('')
   const [gameTitleInput, setGameTitleInput] = useState('')
@@ -111,9 +116,9 @@ export default function AdminPage() {
     if (state) {
       if (displayRoundInput === '') setDisplayRoundInput(String(state.displayRound ?? state.currentRound))
       if (state.voting) {
-        if (state.voting.optionA) setVotingOptionA(state.voting.optionA)
-        if (state.voting.optionB) setVotingOptionB(state.voting.optionB)
-        if (state.voting.deadline) setVotingDeadline(state.voting.deadline)
+        setVotingOptionA(state.voting.optionA || 'Support')
+        setVotingOptionB(state.voting.optionB || 'Fight')
+        setVotingDeadline(state.voting.deadline || '')
       }
       if (gameTitleInput === '' && state.gameTitle) setGameTitleInput(state.gameTitle)
     }
@@ -722,10 +727,35 @@ export default function AdminPage() {
                 </div>
               </div>
               <div>
-                <div className="label" style={{ marginBottom:4, fontSize:9 }}>Voting Deadline (YYYY-MM-DD HH:MM)</div>
-                <input className="input" placeholder="2026-05-01 23:59" value={votingDeadline} onChange={e => setVotingDeadline(e.target.value)} />
+                <div className="label" style={{ marginBottom:4, fontSize:9 }}>Voting Deadline</div>
+                <div style={{ display:'flex', gap:5, alignItems:'center', flexWrap:'wrap' }}>
+                  <input type="number" className="input" style={{ width:72 }} placeholder="YYYY" value={dlYear}
+                    onChange={e => setDlYear(e.target.value)} min={2024} max={2099} />
+                  <span style={{ color:'var(--text-dim)', fontSize:12 }}>-</span>
+                  <input type="number" className="input" style={{ width:52 }} placeholder="MM" value={dlMonth}
+                    onChange={e => setDlMonth(e.target.value.padStart(2,'0').slice(-2))} min={1} max={12} />
+                  <span style={{ color:'var(--text-dim)', fontSize:12 }}>-</span>
+                  <input type="number" className="input" style={{ width:52 }} placeholder="DD" value={dlDay}
+                    onChange={e => setDlDay(e.target.value.padStart(2,'0').slice(-2))} min={1} max={31} />
+                  <span style={{ color:'var(--text-dim)', fontSize:12 }}>at</span>
+                  <input type="number" className="input" style={{ width:52 }} placeholder="HH" value={dlHour}
+                    onChange={e => setDlHour(e.target.value.padStart(2,'0').slice(-2))} min={0} max={23} />
+                  <span style={{ color:'var(--text-dim)', fontSize:12 }}>:</span>
+                  <input type="number" className="input" style={{ width:52 }} placeholder="MM" value={dlMin}
+                    onChange={e => setDlMin(e.target.value.padStart(2,'0').slice(-2))} min={0} max={59} />
+                </div>
+                {dlYear && dlMonth && dlDay && dlHour && dlMin && (
+                  <div style={{ fontSize:10, color:'var(--text-dim)', marginTop:4 }}>
+                    Deadline: {dlYear}-{dlMonth}-{dlDay} {dlHour}:{dlMin}
+                  </div>
+                )}
               </div>
-              <button className="btn btn-gold" style={{ padding:8 }} onClick={() => act('update_voting', { optionA: votingOptionA, optionB: votingOptionB, deadline: votingDeadline, presidentId, presidentTitle })}>
+              <button className="btn btn-gold" style={{ padding:8 }} onClick={() => {
+                const deadline = (dlYear && dlMonth && dlDay && dlHour && dlMin)
+                  ? `${dlYear}-${dlMonth}-${dlDay} ${dlHour}:${dlMin}`
+                  : votingDeadline
+                act('update_voting', { optionA: votingOptionA, optionB: votingOptionB, deadline, presidentId, presidentTitle })
+              }}>
                 Save Voting Settings
               </button>
               <hr style={{ border:'none', borderTop:'1px solid var(--border)' }} />
