@@ -40,6 +40,14 @@ export interface NewsItem {
   createdAt: string
 }
 
+export interface ArchiveArticle {
+  id: string
+  headline: string
+  body: string
+  pullQuote?: string
+  createdAt: string
+}
+
 export interface VotingState {
   open: boolean
   optionA: string
@@ -49,9 +57,6 @@ export interface VotingState {
   votedEmails: string[]
   presidentId?: string
   presidentTitle?: string
-  liveVotesVisible?: boolean
-  coupThreshold?: number
-  coupTriggered?: boolean
 }
 
 export interface GameState {
@@ -64,6 +69,9 @@ export interface GameState {
   votingTabOpen: boolean
   newsboxTabOpen: boolean
   newsItems: NewsItem[]
+  gazetteTabOpen: boolean
+  archiveTabOpen: boolean
+  archiveArticles: ArchiveArticle[]
 }
 
 const KV_KEY = 'hd_game_state_v3'
@@ -75,10 +83,13 @@ function makeDefault(): GameState {
     roundOpen: false,
     adminPassword: process.env.ADMIN_PASSWORD || 'hawk2024admin',
     gameTitle: '',
-    voting: { open: false, optionA: 'Support', optionB: 'Fight', deadline: '', resultsRevealed: false, votedEmails: [], presidentId: '', presidentTitle: '', liveVotesVisible: false, coupThreshold: 10, coupTriggered: false },
+    voting: { open: false, optionA: 'Support', optionB: 'Fight', deadline: '', resultsRevealed: false, votedEmails: [], presidentId: '', presidentTitle: '' },
     votingTabOpen: false,
     newsboxTabOpen: false,
     newsItems: [],
+    gazetteTabOpen: false,
+    archiveTabOpen: false,
+    archiveArticles: [],
   }
 }
 
@@ -110,6 +121,12 @@ export async function getState(): Promise<GameState> {
     if (!persisted.newsItems) persisted.newsItems = []
     if (persisted.votingTabOpen === undefined) persisted.votingTabOpen = false
     if (persisted.newsboxTabOpen === undefined) persisted.newsboxTabOpen = false
+    if (persisted.gazetteTabOpen === undefined) persisted.gazetteTabOpen = false
+    if (persisted.archiveTabOpen === undefined) persisted.archiveTabOpen = false
+    if (!persisted.archiveArticles) persisted.archiveArticles = []
+    if (persisted.voting.liveVotesVisible === undefined) persisted.voting.liveVotesVisible = false
+    if (persisted.voting.coupThreshold === undefined) persisted.voting.coupThreshold = 10
+    if (persisted.voting.coupTriggered === undefined) persisted.voting.coupTriggered = false
     _mem = persisted
     return _mem
   }
@@ -208,14 +225,6 @@ export async function submitVote(email: string, choice: string): Promise<{ ok: b
   if (!student) return { ok: false, error: 'Email not found in roster. Contact your instructor.' }
   student.voteChoice = choice
   s.voting.votedEmails.push(normalizedEmail)
-  // Check coup threshold
-  if (!s.voting.coupTriggered) {
-    const coupVotes = s.students.filter(x => x.voteChoice === 'b').length
-    const threshold = s.voting.coupThreshold ?? 10
-    if (coupVotes >= threshold) {
-      s.voting.coupTriggered = true
-    }
-  }
   await save()
   return { ok: true }
 }
