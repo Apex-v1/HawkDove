@@ -6,6 +6,7 @@ interface StudentInfo {
   hasChosen: boolean; choice?: string; isEliminated: boolean
   staplePartnerId?: string; isHawkInStaple?: boolean; tiebreaker?: number
   voteEligible?: boolean
+  voteChoice?: string
 }
 interface Pairing {
   pairingId: string; type: string; aId: string; bId: string
