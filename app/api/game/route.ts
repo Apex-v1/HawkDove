@@ -6,6 +6,8 @@ export async function GET() {
   const s = await getState()
   const eligibleStudents = s.students.filter(st => st.voteEligible !== false && !st.isEliminated)
   const eligibleTotal = eligibleStudents.reduce((sum, st) => sum + st.points, 0)
+  const votesA = s.students.filter(st => st.voteChoice === 'a').length
+  const votesB = s.students.filter(st => st.voteChoice === 'b').length
 
   return NextResponse.json({
     roundOpen: s.roundOpen,
@@ -30,13 +32,14 @@ export async function GET() {
       liveVotesVisible: s.voting.liveVotesVisible ?? false,
       coupThreshold: s.voting.coupThreshold ?? 10,
       coupTriggered: s.voting.coupTriggered ?? false,
-      liveVotes: s.voting.liveVotesVisible
-        ? s.students.filter(st => st.voteChoice).map(st => ({ name: st.name, choice: st.voteChoice }))
-        : [],
-      votesA: s.students.filter(st => st.voteChoice === 'a').length,
-      votesB: s.students.filter(st => st.voteChoice === 'b').length,
+      votesA,
+      votesB,
       totalVoted: s.voting.votedEmails.length,
       eligibleTotal,
+      // only expose individual votes if liveVotesVisible is on OR results revealed
+      liveVotes: (s.voting.liveVotesVisible || s.voting.resultsRevealed)
+        ? s.students.filter(st => st.voteChoice).map(st => ({ name: st.name, choice: st.voteChoice, email: st.email }))
+        : [],
     },
     students: s.students.map(st => ({
       id: st.id, name: st.name, email: st.email,
@@ -47,6 +50,7 @@ export async function GET() {
       staplePartnerId: st.staplePartnerId,
       isHawkInStaple: st.isHawkInStaple,
       voteEligible: st.voteEligible !== false,
+      voteChoice: (s.voting.liveVotesVisible || s.voting.resultsRevealed) ? st.voteChoice : undefined,
     })),
     lastRound: s.rounds.length > 0 ? s.rounds[s.rounds.length - 1] : null,
     rounds: s.rounds,
