@@ -537,7 +537,11 @@ export default function AdminPage() {
                             {s.isEliminated ? '💀' : <span style={{ color:'var(--text-dim)', fontSize:11 }}>—</span>}
                           </button>
                         </td>
-                        <td style={{ padding:'5px 8px' }}><span style={{ fontSize:10, color:'var(--text-dim)', cursor:'pointer' }} onClick={() => startEdit(s)}>edit</span></td>
+                        <td style={{ padding:'5px 8px' }}>
+                          span style={{ fontSize:10, color:'var(--text-dim)', cursor:'pointer' }} onClick={() => startEdit(s)}>edit</span>
+                        <span style={{ fontSize:10, color:'var(--hawk)', cursor:'pointer', marginLeft:8 }}
+                          onClick={() => { if (confirm(`Delete ${s.name}?`)) act('delete_student', { id: s.id }) }}>del</span>
+                      </td>
                         <td style={{ padding:'4px 6px' }} onClick={e => e.stopPropagation()}>
                           {adjustId === s.id ? (
                             <div style={{ display:'flex', gap:3, alignItems:'center' }}>
