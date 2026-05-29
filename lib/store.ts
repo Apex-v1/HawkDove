@@ -16,6 +16,7 @@ export interface Student {
   stapleTransferAmount?: number
   isEliminated: boolean
   voteChoice?: string
+  voteEligible?: boolean
   roundHistory: { round: number; type: string; pair: string; result: string }[]
 }
 
@@ -40,14 +41,6 @@ export interface NewsItem {
   createdAt: string
 }
 
-export interface ArchiveArticle {
-  id: string
-  headline: string
-  body: string
-  pullQuote?: string
-  createdAt: string
-}
-
 export interface VotingState {
   open: boolean
   optionA: string
@@ -57,9 +50,6 @@ export interface VotingState {
   votedEmails: string[]
   presidentId?: string
   presidentTitle?: string
-  liveVotesVisible?: boolean
-  coupThreshold?: number
-  coupTriggered?: boolean
 }
 
 export interface GameState {
@@ -72,9 +62,6 @@ export interface GameState {
   votingTabOpen: boolean
   newsboxTabOpen: boolean
   newsItems: NewsItem[]
-  gazetteTabOpen: boolean
-  archiveTabOpen: boolean
-  archiveArticles: ArchiveArticle[]
 }
 
 const KV_KEY = 'hd_game_state_v3'
@@ -90,9 +77,6 @@ function makeDefault(): GameState {
     votingTabOpen: false,
     newsboxTabOpen: false,
     newsItems: [],
-    gazetteTabOpen: false,
-    archiveTabOpen: false,
-    archiveArticles: [],
   }
 }
 
@@ -124,12 +108,6 @@ export async function getState(): Promise<GameState> {
     if (!persisted.newsItems) persisted.newsItems = []
     if (persisted.votingTabOpen === undefined) persisted.votingTabOpen = false
     if (persisted.newsboxTabOpen === undefined) persisted.newsboxTabOpen = false
-    if (persisted.gazetteTabOpen === undefined) persisted.gazetteTabOpen = false
-    if (persisted.archiveTabOpen === undefined) persisted.archiveTabOpen = false
-    if (!persisted.archiveArticles) persisted.archiveArticles = []
-    if (persisted.voting.liveVotesVisible === undefined) persisted.voting.liveVotesVisible = false
-    if (persisted.voting.coupThreshold === undefined) persisted.voting.coupThreshold = 10
-    if (persisted.voting.coupTriggered === undefined) persisted.voting.coupTriggered = false
     _mem = persisted
     return _mem
   }
@@ -226,8 +204,15 @@ export async function submitVote(email: string, choice: string): Promise<{ ok: b
   if (s.voting.votedEmails.includes(normalizedEmail)) return { ok: false, error: 'This email has already voted.' }
   const student = s.students.find(x => x.email.toLowerCase() === normalizedEmail)
   if (!student) return { ok: false, error: 'Email not found in roster. Contact your instructor.' }
+  if (student.voteEligible === false) return { ok: false, error: 'You are not eligible to vote in this round.' }
   student.voteChoice = choice
   s.voting.votedEmails.push(normalizedEmail)
+  // Check coup threshold
+  if (!s.voting.coupTriggered) {
+    const coupVotes = s.students.filter(x => x.voteChoice === 'b').length
+    const threshold = s.voting.coupThreshold ?? 10
+    if (coupVotes >= threshold) { s.voting.coupTriggered = true }
+  }
   await save()
   return { ok: true }
 }
