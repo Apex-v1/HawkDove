@@ -4,6 +4,9 @@ export const dynamic = 'force-dynamic'
 
 export async function GET() {
   const s = await getState()
+  const eligibleStudents = s.students.filter(st => st.voteEligible !== false && !st.isEliminated)
+  const eligibleTotal = eligibleStudents.reduce((sum, st) => sum + st.points, 0)
+
   return NextResponse.json({
     roundOpen: s.roundOpen,
     currentRound: s.currentRound,
@@ -12,10 +15,10 @@ export async function GET() {
     gameTitle: s.gameTitle || '',
     votingTabOpen: s.votingTabOpen,
     newsboxTabOpen: s.newsboxTabOpen,
-    gazetteTabOpen: s.gazetteTabOpen,
-    archiveTabOpen: s.archiveTabOpen,
+    gazetteTabOpen: (s as any).gazetteTabOpen ?? false,
+    archiveTabOpen: (s as any).archiveTabOpen ?? false,
     newsItems: s.newsItems || [],
-    archiveArticles: s.archiveArticles || [],
+    archiveArticles: (s as any).archiveArticles || [],
     voting: {
       open: s.voting.open,
       optionA: s.voting.optionA,
@@ -27,13 +30,13 @@ export async function GET() {
       liveVotesVisible: s.voting.liveVotesVisible ?? false,
       coupThreshold: s.voting.coupThreshold ?? 10,
       coupTriggered: s.voting.coupTriggered ?? false,
-      // only expose individual votes if liveVotesVisible is on
       liveVotes: s.voting.liveVotesVisible
         ? s.students.filter(st => st.voteChoice).map(st => ({ name: st.name, choice: st.voteChoice }))
         : [],
       votesA: s.students.filter(st => st.voteChoice === 'a').length,
       votesB: s.students.filter(st => st.voteChoice === 'b').length,
       totalVoted: s.voting.votedEmails.length,
+      eligibleTotal,
     },
     students: s.students.map(st => ({
       id: st.id, name: st.name, email: st.email,
@@ -43,6 +46,7 @@ export async function GET() {
       isEliminated: st.isEliminated,
       staplePartnerId: st.staplePartnerId,
       isHawkInStaple: st.isHawkInStaple,
+      voteEligible: st.voteEligible !== false,
     })),
     lastRound: s.rounds.length > 0 ? s.rounds[s.rounds.length - 1] : null,
     rounds: s.rounds,
