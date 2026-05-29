@@ -152,7 +152,7 @@ export default function DisplayPage() {
           <span style={{ color:'var(--dove)' }}>{titleB}</span>
         </div>
         <div style={{ display:'flex', gap:12, alignItems:'center' }}>
-          {([['WEEK', game.week], ['ROUND', shownRound||'—'], ['ACTIVE', active.length], ['PTS', fmt(total)]] as [string, string|number][]).map(([l,v]) => (
+          {([['WEEK', '10'], ['ROUND', shownRound||'—'], ['ACTIVE', active.length], ['PTS', fmt(total)]] as [string, string|number][]).map(([l,v]) => (
             <div key={String(l)} style={{ textAlign:'center' }}>
               <div style={{ fontSize:9, color:'var(--text-dim)', letterSpacing:'0.2em' }}>{l}</div>
               <div style={{ fontSize:16, fontWeight:500, color:'var(--gold)' }}>{v}</div>
