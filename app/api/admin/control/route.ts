@@ -154,6 +154,15 @@ export async function POST(req: NextRequest) {
         await kvSave(s)
         return NextResponse.json({ ok:true, state: await getState() })
       }
+      case 'toggle_vote_eligible': {
+        const s = await getState()
+        const st = s.students.find(x => x.id === payload.id)
+        if (st) {
+          st.voteEligible = st.voteEligible === false ? true : false
+          await kvSave(s)
+        }
+        return NextResponse.json({ ok:true, state: await getState() })
+      }
       case 'toggle_live_votes': {
         const s = await getState()
         s.voting.liveVotesVisible = !s.voting.liveVotesVisible
