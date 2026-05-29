@@ -339,7 +339,52 @@ export default function AdminPage() {
               </label>
               {uploadMsg && <div style={{ marginTop:8, fontSize:11, color: uploadMsg.startsWith('Error') ? 'var(--hawk)' : 'var(--green)' }}>{uploadMsg}</div>}
             </div>
-
+            
+            {/* Add Student */}
+            <div className="card" style={{ padding:14 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: showAddStudent ? 10 : 0 }}>
+                <div className="label">Add Student</div>
+                <button className="btn btn-ghost" style={{ fontSize:10, padding:'3px 9px' }}
+                  onClick={() => setShowAddStudent(s => !s)}>
+                  {showAddStudent ? '✕ Close' : '+ Add'}
+                </button>
+              </div>
+              {showAddStudent && (
+                <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
+                  <input className="input" placeholder="Full name" value={newStudent.name}
+                    onChange={e => setNewStudent(p => ({ ...p, name: e.target.value }))} />
+                  <input className="input" placeholder="Email" value={newStudent.email}
+                    onChange={e => setNewStudent(p => ({ ...p, email: e.target.value }))} />
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:7 }}>
+                    <div>
+                      <div style={{ fontSize:10, color:'var(--text-dim)', marginBottom:3 }}>Points</div>
+                      <input type="number" className="input" value={newStudent.points}
+                        onChange={e => setNewStudent(p => ({ ...p, points: e.target.value }))} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize:10, color:'var(--text-dim)', marginBottom:3 }}>Tiebreaker</div>
+                      <input type="number" className="input" value={newStudent.tiebreaker}
+                        onChange={e => setNewStudent(p => ({ ...p, tiebreaker: e.target.value }))} />
+                    </div>
+                  </div>
+                  <button className="btn btn-dove" style={{ padding:8, fontSize:12 }}
+                    disabled={!newStudent.name || !newStudent.email}
+                    onClick={async () => {
+                      await act('add_student', {
+                        name: newStudent.name,
+                        email: newStudent.email,
+                        points: parseFloat(newStudent.points) || 0,
+                        tiebreaker: parseFloat(newStudent.tiebreaker) || 0,
+                      })
+                      setNewStudent({ name: '', email: '', tiebreaker: '0', points: '0' })
+                      setShowAddStudent(false)
+                    }}>
+                    Add Student →
+                  </button>
+                </div>
+              )}
+            </div>
+            
             {/* Staple manager */}
             <div className="card" style={{ padding:14 }}>
               <div className="label" style={{ marginBottom:10 }}>Protectorate / Staple Pairs</div>
