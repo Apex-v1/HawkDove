@@ -16,6 +16,8 @@ export interface Student {
   stapleTransferAmount?: number
   isEliminated: boolean
   voteChoice?: string
+  voteEligible?: boolean
+  coupPct?: number
   roundHistory: { round: number; type: string; pair: string; result: string }[]
 }
 
