@@ -538,7 +538,7 @@ export default function AdminPage() {
                           </button>
                         </td>
                         <td style={{ padding:'5px 8px' }}>
-                          span style={{ fontSize:10, color:'var(--text-dim)', cursor:'pointer' }} onClick={() => startEdit(s)}>edit</span>
+                          <span style={{ fontSize:10, color:'var(--text-dim)', cursor:'pointer' }} onClick={() => startEdit(s)}>edit</span>
                         <span style={{ fontSize:10, color:'var(--hawk)', cursor:'pointer', marginLeft:8 }}
                           onClick={() => { if (confirm(`Delete ${s.name}?`)) act('delete_student', { id: s.id }) }}>del</span>
                       </td>
