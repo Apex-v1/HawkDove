@@ -194,6 +194,12 @@ export async function POST(req: NextRequest) {
   }
   return NextResponse.json({ ok:true, state: await getState() })
 }
+        case 'delete_student': {
+  const s = await getState()
+  s.students = s.students.filter(x => x.id !== payload.id)
+  await kvSave(s)
+  return NextResponse.json({ ok:true, state: await getState() })
+}
       case 'reset': { await resetState(); return NextResponse.json({ ok:true }) }
       default: return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
     }
