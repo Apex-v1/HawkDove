@@ -817,7 +817,9 @@ export default function AdminPage() {
                   onClick={() => act('update_voting', { open: !state.voting?.open })}>
                   {state.voting?.open ? '✕ Close Voting' : '▶ Open Voting'}
                 </button>
-                <button className="btn btn-gold" style={{ padding:'7px 14px', fontSize:11 }} onClick={() => act('reveal_results')}>Reveal Results</button>
+                <button className="btn btn-gold" style={{ padding:'7px 14px', fontSize:11 }} onClick={() => act('reveal_results')}>
+                  {state.voting?.resultsRevealed ? 'Hide Results' : 'Reveal Results'}
+                </button>
                 <button className="btn btn-ghost" style={{ padding:'7px 14px', fontSize:11 }} onClick={() => { if (confirm('Clear all votes?')) act('clear_votes') }}>Clear Votes</button>
               </div>
             </div>
