@@ -231,6 +231,7 @@ export async function submitVote(email: string, choice: string): Promise<{ ok: b
   if (s.voting.votedEmails.includes(normalizedEmail)) return { ok: false, error: 'This email has already voted.' }
   const student = s.students.find(x => x.email.toLowerCase() === normalizedEmail)
   if (!student) return { ok: false, error: 'Email not found in roster. Contact your instructor.' }
+  if (student.voteEligible === false) return { ok: false, error: 'You are not eligible to vote in this round.' }
   student.voteChoice = choice
   s.voting.votedEmails.push(normalizedEmail)
   await save()
