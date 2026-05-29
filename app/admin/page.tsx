@@ -8,7 +8,6 @@ interface Student {
   hasChosen: boolean; choice?: string; isEliminated: boolean
   staplePartnerId?: string; isHawkInStaple?: boolean; stapleTransferAmount?: number
   voteChoice?: string
-  voteEligible?: boolean
   roundHistory?: { round: number; type: string; pair: string; result: string }[]
 }
 interface Pairing {
@@ -21,7 +20,7 @@ interface RoundRecord {
   computedAt: string; finalizedAt?: string
 }
 interface NewsItem { id: string; html: string; createdAt: string }
-interface VotingState { open: boolean; optionA: string; optionB: string; deadline: string; resultsRevealed: boolean; votedEmails: string[]; liveVotesVisible?: boolean; coupThreshold?: number; coupTriggered?: boolean }
+interface VotingState { open: boolean; optionA: string; optionB: string; deadline: string; resultsRevealed: boolean; votedEmails: string[] }
 interface GameState {
   week: number; currentRound: number; displayRound?: number; students: Student[]
   rounds: RoundRecord[]; roundOpen: boolean; pendingRound?: RoundRecord
@@ -90,7 +89,6 @@ export default function AdminPage() {
   const [presidentId, setPresidentId] = useState('')
   const [presidentTitle, setPresidentTitle] = useState('')
   const [gameTitleInput, setGameTitleInput] = useState('')
-  const [coupThresholdInput, setCoupThresholdInput] = useState('10')
   // Newsbox state
   const [newsEditor, setNewsEditor] = useState('')
   const [newsEditorRef, setNewsEditorRef] = useState<HTMLDivElement|null>(null)
@@ -118,7 +116,6 @@ export default function AdminPage() {
         setVotingDeadline(state.voting.deadline || '')
       }
       if (gameTitleInput === '' && state.gameTitle) setGameTitleInput(state.gameTitle)
-        if (state.voting?.coupThreshold !== undefined) setCoupThresholdInput(String(state.voting.coupThreshold))
     }
   }, [state])
 
@@ -444,8 +441,6 @@ export default function AdminPage() {
                     </th>
                     <th style={{ padding:'5px 8px', color:'var(--text-dim)', fontWeight:400, fontSize:10 }}></th>
                     <th style={{ padding:'5px 8px', color:'var(--text-dim)', fontWeight:400, fontSize:10 }}>+/−</th>
-                    <th style={{ padding:'5px 8px', color:'var(--text-dim)', fontWeight:400, fontSize:10, whiteSpace:'nowrap' }}>% Coup</th>
-                    <th style={{ padding:'5px 8px', color:'var(--text-dim)', fontWeight:400, fontSize:10, whiteSpace:'nowrap' }}>Vote Elig.</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -465,7 +460,7 @@ export default function AdminPage() {
                             <option value="dove">🕊️ Dove</option>
                           </select>
                         </td>
-                        <td colSpan={5} />
+                        <td colSpan={3} />
                         <td style={{ padding:'4px 6px' }}>
                           <div style={{ display:'flex', gap:4 }}>
                             <button className="btn btn-gold" style={{ padding:'3px 8px', fontSize:10 }} onClick={() => saveEdit(s.id)}>Save</button>
@@ -745,29 +740,6 @@ export default function AdminPage() {
                 </button>
                 <button className="btn btn-gold" style={{ padding:'7px 14px', fontSize:11 }} onClick={() => act('reveal_results')}>Reveal Results</button>
                 <button className="btn btn-ghost" style={{ padding:'7px 14px', fontSize:11 }} onClick={() => { if (confirm('Clear all votes?')) act('clear_votes') }}>Clear Votes</button>
-              </div>
-              <hr style={{ border:'none', borderTop:'1px solid var(--border)' }} />
-              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                <div>
-                  <div className="label" style={{ marginBottom:4, fontSize:9 }}>Live Vote Visibility (show who voted what in real time on /display)</div>
-                  <button className="btn" style={{ borderColor: state.voting?.liveVotesVisible ? 'var(--hawk)' : 'var(--green)', color: state.voting?.liveVotesVisible ? 'var(--hawk)' : 'var(--green)', padding:'7px 14px', fontSize:11 }}
-                    onClick={() => act('toggle_live_votes')}>
-                    {state.voting?.liveVotesVisible ? '✕ Hide Live Votes' : '▶ Show Live Votes'}
-                  </button>
-                </div>
-                <div>
-                  <div className="label" style={{ marginBottom:4, fontSize:9 }}>Red Screen Threshold — triggers full-screen alert on /display when this many vote for {state.voting?.optionB || 'Option B'}</div>
-                  <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                    <input type="number" className="input" style={{ width:80 }} value={coupThresholdInput} onChange={e => setCoupThresholdInput(e.target.value)} min={1} />
-                    <button className="btn btn-ghost" style={{ padding:'5px 12px', fontSize:11 }} onClick={() => act('set_coup_threshold', { threshold: parseInt(coupThresholdInput) || 10 })}>Set</button>
-                  </div>
-                </div>
-                {state.voting?.coupTriggered && (
-                  <div style={{ display:'flex', gap:8, alignItems:'center', padding:'10px 14px', background:'rgba(224,48,32,0.08)', border:'1px solid var(--hawk)' }}>
-                    <span style={{ fontSize:12, color:'var(--hawk)' }}>🔴 Red screen is active on /display</span>
-                    <button className="btn btn-ghost" style={{ padding:'4px 10px', fontSize:10, marginLeft:'auto' }} onClick={() => act('reset_coup')}>Dismiss</button>
-                  </div>
-                )}
               </div>
             </div>
           </div>
