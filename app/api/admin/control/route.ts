@@ -116,10 +116,10 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok:true, state: await getState() })
       }
       case 'reveal_results': {
-        const s = await getState()
-        s.voting.resultsRevealed = true
-        await kvSave(s)
-        return NextResponse.json({ ok:true, state: await getState() })
+      const s = await getState()
+      s.voting.resultsRevealed = !s.voting.resultsRevealed
+      await kvSave(s)
+       return NextResponse.json({ ok:true, state: await getState() })
       }
       case 'clear_votes': {
         const s = await getState()
