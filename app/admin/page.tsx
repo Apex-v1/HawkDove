@@ -441,6 +441,8 @@ export default function AdminPage() {
                     </th>
                     <th style={{ padding:'5px 8px', color:'var(--text-dim)', fontWeight:400, fontSize:10 }}></th>
                     <th style={{ padding:'5px 8px', color:'var(--text-dim)', fontWeight:400, fontSize:10 }}>+/−</th>
+                    <th style={{ padding:'5px 8px', color:'var(--text-dim)', fontWeight:400, fontSize:10, whiteSpace:'nowrap' }}>% Coup</th>
+                    <th style={{ padding:'5px 8px', color:'var(--text-dim)', fontWeight:400, fontSize:10, whiteSpace:'nowrap' }}>Vote Elig.</th>
                   </tr>
                 </thead>
                 <tbody>
