@@ -1,10 +1,11 @@
 'use client'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
 interface StudentInfo {
   id: string; name: string; email: string; points: number
   hasChosen: boolean; choice?: string; isEliminated: boolean
   staplePartnerId?: string; isHawkInStaple?: boolean; tiebreaker?: number
+  voteEligible?: boolean; voteChoice?: string
 }
 interface Pairing {
   pairingId: string; type: string; aId: string; bId: string
@@ -15,12 +16,19 @@ interface RoundRecord {
   snapshotBefore: Record<string,number>; snapshotAfter: Record<string,number>
 }
 interface NewsItem { id: string; html: string; createdAt: string }
+interface VotingInfo {
+  open: boolean; optionA: string; optionB: string; deadline: string
+  resultsRevealed: boolean; presidentId?: string; presidentTitle?: string
+  liveVotesVisible?: boolean; coupTriggered?: boolean; coupThreshold?: number
+  votesA?: number; votesB?: number; totalVoted?: number; eligibleTotal?: number
+  liveVotes?: { name: string; choice: string; email: string }[]
+}
 interface GameInfo {
   roundOpen: boolean; currentRound: number; week: number; displayRound?: number
   gameTitle?: string
   votingTabOpen: boolean; newsboxTabOpen: boolean
   newsItems: NewsItem[]
-  voting: { open: boolean; optionA: string; optionB: string; deadline: string; resultsRevealed: boolean; presidentId?: string; presidentTitle?: string }
+  voting: VotingInfo
   students: StudentInfo[]
   lastRound: RoundRecord | null
   rounds?: RoundRecord[]
@@ -30,7 +38,6 @@ function fmt(n: number) {
   const rounded = Math.round(n * 100) / 100
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2).replace(/\.?0+$/, '')
 }
-
 function timeAgo(iso: string) {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
   if (diff < 60) return 'Just now'
@@ -82,8 +89,16 @@ export default function DisplayPage() {
   const ss = String(tick%60).padStart(2,'0')
   const shownRound = game.displayRound ?? game.currentRound
 
-  // Timer countdown
+  // Deadline / auto-accept logic
   const deadlineSecs = game.voting.deadline ? Math.max(0, Math.floor((new Date(game.voting.deadline).getTime() - Date.now()) / 1000)) : 0
+  const deadlinePassed = game.voting.deadline ? new Date(game.voting.deadline).getTime() < Date.now() : false
+  const eligibleStudents = game.students.filter(s => s.voteEligible !== false && !s.isEliminated)
+  const nonVoters = eligibleStudents.filter(s => !s.voteChoice)
+  const autoAcceptCount = deadlinePassed && game.voting.open ? nonVoters.length : 0
+  const effectiveVotesA = (game.voting.votesA ?? 0) + autoAcceptCount
+  const effectiveVotesB = game.voting.votesB ?? 0
+  const effectiveTotal = effectiveVotesA + effectiveVotesB
+
   const timerD = String(Math.floor(deadlineSecs / 86400)).padStart(2,'0')
   const timerH = String(Math.floor((deadlineSecs % 86400) / 3600)).padStart(2,'0')
   const timerM = String(Math.floor((deadlineSecs % 3600) / 60)).padStart(2,'0')
@@ -107,8 +122,28 @@ export default function DisplayPage() {
     ...(game.newsboxTabOpen ? ['newsbox' as Tab] : []),
   ]
 
+  const optA = game.voting.optionA || 'Accept'
+  const optB = game.voting.optionB || 'Coup'
+
   return (
     <div style={{ minHeight:'100vh', display:'flex', flexDirection:'column', background:'var(--bg)', fontFamily:'DM Mono, Courier New, monospace' }}>
+
+      {/* ── RED SCREEN ── */}
+      {game.voting.coupTriggered && (
+        <div style={{ position:'fixed', inset:0, zIndex:9999, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', animation:'redPulse 2s ease infinite' }}>
+          <style>{`@keyframes redPulse { 0%,100%{background:#1a0000} 50%{background:#300000} }`}</style>
+          <div style={{ fontSize:11, letterSpacing:'.4em', color:'#ff3030', textTransform:'uppercase', marginBottom:20, opacity:.7 }}>Coalition Status</div>
+          <div style={{ fontSize:96, fontWeight:700, color:'#ff2020', lineHeight:1, textShadow:'0 0 60px #ff202099', marginBottom:20 }}>COUP</div>
+          <div style={{ fontSize:20, color:'#ff6060', letterSpacing:'.15em', marginBottom:12 }}>THRESHOLD REACHED</div>
+          <div style={{ fontSize:14, color:'rgba(255,80,80,0.7)', letterSpacing:'.08em' }}>
+            {effectiveVotesB} votes for {optB} — coalition has fallen
+          </div>
+          <div style={{ marginTop:48, fontSize:10, color:'rgba(255,60,60,0.35)', letterSpacing:'.2em', textTransform:'uppercase' }}>
+            Admin can dismiss this screen
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 24px', borderBottom:'1px solid var(--border)', background:'var(--bg-card)', flexShrink:0 }}>
         <div style={{ fontSize:20, fontWeight:500 }}>
@@ -155,7 +190,7 @@ export default function DisplayPage() {
 
         {/* ── LEADERBOARD ── */}
         {tab === 'leaderboard' && (
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 320px', gap:16, height:'100%' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 320px', gap:16 }}>
             <div>
               <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:12 }}>STANDINGS</div>
               {game.roundOpen && (
@@ -260,9 +295,11 @@ export default function DisplayPage() {
 
         {/* ── VOTE ── */}
         {tab === 'vote' && (
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 300px', gap:20 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 320px', gap:20 }}>
+
+            {/* Left: vote form or results */}
             <div style={{ maxWidth:520 }}>
-  {/* President banner */}
+              {/* Candidate banner */}
               {game.voting.presidentId && (() => {
                 const president = game.students.find(s => s.id === game.voting.presidentId)
                 if (!president) return null
@@ -273,24 +310,51 @@ export default function DisplayPage() {
                     <div style={{ fontSize:26, fontWeight:500, color:'var(--text)', marginBottom: game.voting.presidentTitle ? 4 : 8 }}>
                       {president.name.includes(',') ? president.name.split(',').slice(1).join(',').trim() + ' ' + president.name.split(',')[0] : president.name}
                     </div>
-                    {game.voting.presidentTitle && (
-                      <div style={{ fontSize:12, color:'var(--gold)', letterSpacing:'0.1em', marginBottom:8, textTransform:'uppercase' }}>{game.voting.presidentTitle}</div>
-                    )}
-                    <div style={{ fontSize:13, color:'var(--text-dim)' }}>
-                      <span style={{ color:'var(--gold)', fontWeight:500 }}>{fmt(president.points)}</span> pts
-                    </div>
+                    {game.voting.presidentTitle && <div style={{ fontSize:12, color:'var(--gold)', letterSpacing:'0.1em', marginBottom:8, textTransform:'uppercase' }}>{game.voting.presidentTitle}</div>}
+                    <div style={{ fontSize:13, color:'var(--text-dim)' }}><span style={{ color:'var(--gold)', fontWeight:500 }}>{fmt(president.points)}</span> pts</div>
                   </div>
                 )
               })()}
-              <div style={{ fontSize:16, fontWeight:500, marginBottom:6 }}>Cast your vote</div>
-              <div style={{ fontSize:11, color:'var(--text-dim)', marginBottom:18, lineHeight:1.9, letterSpacing:'0.03em' }}>
-                You may vote once. Enter your registered email to confirm your identity.<br/>
-                Results are hidden until voting closes. Made a mistake? Email your instructor.
-              </div>
 
-              {voteDone ? (
-                <div style={{ padding:'16px 20px', background:'var(--green-bg)', border:'1px solid var(--green)', fontSize:13, color:'var(--green)', letterSpacing:'0.05em' }}>
+              {/* Results revealed */}
+              {game.voting.resultsRevealed ? (
+                <div>
+                  <div style={{ fontSize:14, fontWeight:500, marginBottom:16, color:'var(--gold)', letterSpacing:'.05em' }}>RESULTS</div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:16 }}>
+                    <div style={{ background:'#1e1408', border:`2px solid ${effectiveVotesA >= effectiveVotesB ? '#e8a020' : '#3a1800'}`, padding:20, textAlign:'center' }}>
+                      <div style={{ fontSize:48, fontWeight:700, color:'#e8a020', lineHeight:1 }}>{effectiveVotesA}</div>
+                      <div style={{ fontSize:12, color:'#e8a020', marginTop:6, letterSpacing:'.1em' }}>{optA}</div>
+                      {autoAcceptCount > 0 && <div style={{ fontSize:10, color:'rgba(232,160,32,0.5)', marginTop:4 }}>incl. {autoAcceptCount} auto</div>}
+                    </div>
+                    <div style={{ background:'#0e0d20', border:`2px solid ${effectiveVotesB > effectiveVotesA ? '#7F77DD' : '#1a1840'}`, padding:20, textAlign:'center' }}>
+                      <div style={{ fontSize:48, fontWeight:700, color:'#7F77DD', lineHeight:1 }}>{effectiveVotesB}</div>
+                      <div style={{ fontSize:12, color:'#7F77DD', marginTop:6, letterSpacing:'.1em' }}>{optB}</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize:11, color:'var(--text-dim)', marginBottom:8 }}>
+                    {effectiveTotal} total · {eligibleStudents.length} eligible
+                  </div>
+                  <div style={{ height:6, background:'var(--border)', marginBottom:6 }}>
+                    <div style={{ height:'100%', background:'#e8a020', width:`${effectiveTotal > 0 ? (effectiveVotesA/effectiveTotal)*100 : 50}%`, transition:'width 0.5s' }} />
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:'var(--text-dim)' }}>
+                    <span>{effectiveTotal > 0 ? Math.round(effectiveVotesA/effectiveTotal*100) : 0}% {optA}</span>
+                    <span>{effectiveTotal > 0 ? Math.round(effectiveVotesB/effectiveTotal*100) : 0}% {optB}</span>
+                  </div>
+                  {effectiveVotesB >= (game.voting.coupThreshold ?? 10) && (
+                    <div style={{ marginTop:16, padding:'12px 16px', background:'rgba(224,48,32,0.1)', border:'1px solid var(--hawk)', fontSize:13, color:'var(--hawk)' }}>
+                      ⚠ Coup threshold of {game.voting.coupThreshold ?? 10} reached — coalition failed.
+                    </div>
+                  )}
+                </div>
+              ) : voteDone ? (
+                <div style={{ padding:'16px 20px', background:'var(--green-bg)', border:'1px solid var(--green)', fontSize:13, color:'var(--green)' }}>
                   ✓ Vote recorded. You cannot vote again.
+                </div>
+              ) : deadlinePassed && game.voting.open ? (
+                <div style={{ padding:'16px 20px', background:'var(--bg-card)', border:'1px solid var(--border)', fontSize:13 }}>
+                  <div style={{ color:'var(--gold)', fontWeight:500, marginBottom:6 }}>Deadline has passed.</div>
+                  <div style={{ color:'var(--text-dim)' }}>Players who did not vote have been counted as <strong style={{ color:'#e8a020' }}>{optA}</strong>.</div>
                 </div>
               ) : !game.voting.open ? (
                 <div style={{ padding:'16px 20px', background:'var(--bg-card)', border:'1px solid var(--border)', fontSize:13, color:'var(--text-dim)' }}>
@@ -298,6 +362,11 @@ export default function DisplayPage() {
                 </div>
               ) : (
                 <>
+                  <div style={{ fontSize:16, fontWeight:500, marginBottom:6 }}>Cast your vote</div>
+                  <div style={{ fontSize:11, color:'var(--text-dim)', marginBottom:18, lineHeight:1.9 }}>
+                    You may vote once. Enter your registered email to confirm your identity.<br/>
+                    Results are hidden until voting closes. Made a mistake? Email your instructor.
+                  </div>
                   <div style={{ marginBottom:12 }}>
                     <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:5 }}>YOUR EMAIL</div>
                     <input className="input" placeholder="your@email.edu" value={voteEmail} onChange={e => setVoteEmail(e.target.value)} />
@@ -305,11 +374,11 @@ export default function DisplayPage() {
                   <div style={{ marginBottom:18 }}>
                     <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:8 }}>CHOOSE YOUR SIDE</div>
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-                      {[{key:'a', label: game.voting.optionA, color:'#e8a020', bg:'#1e1408'}, {key:'b', label: game.voting.optionB, color:'#7F77DD', bg:'#0e0d20'}].map(opt => (
+                      {[{key:'a', label:optA, color:'#e8a020', bg:'#1e1408'}, {key:'b', label:optB, color:'#7F77DD', bg:'#0e0d20'}].map(opt => (
                         <div key={opt.key} onClick={() => setVoteChoice(opt.key)}
                           style={{ background: voteChoice===opt.key ? opt.bg : 'var(--bg-raised)', border:`1px solid ${voteChoice===opt.key ? opt.color : 'var(--border-hi)'}`, padding:18, textAlign:'center', cursor:'pointer', transition:'all 0.15s' }}>
                           <div style={{ fontSize:18, fontWeight:500, color:opt.color, marginBottom:4 }}>{opt.label}</div>
-                          <div style={{ fontSize:10, letterSpacing:'0.12em', color:'var(--text-dim)', textTransform:'uppercase' }}>Vote for {opt.label.toLowerCase()}</div>
+                          <div style={{ fontSize:10, letterSpacing:'.12em', color:'var(--text-dim)', textTransform:'uppercase' }}>Vote {opt.label}</div>
                         </div>
                       ))}
                     </div>
@@ -321,7 +390,7 @@ export default function DisplayPage() {
                         {[[timerD,'Days'],[timerH,'Hours'],[timerM,'Mins'],[timerS,'Secs']].map(([v,l]) => (
                           <div key={l} style={{ textAlign:'center', background:'var(--bg-raised)', border:'1px solid var(--border-hi)', padding:'8px 10px', minWidth:52 }}>
                             <div style={{ fontSize:22, fontWeight:500, color:'var(--gold)' }}>{v}</div>
-                            <div style={{ fontSize:9, letterSpacing:'0.15em', color:'var(--text-dim)', textTransform:'uppercase', marginTop:2 }}>{l}</div>
+                            <div style={{ fontSize:9, letterSpacing:'.15em', color:'var(--text-dim)', textTransform:'uppercase', marginTop:2 }}>{l}</div>
                           </div>
                         ))}
                       </div>
@@ -336,19 +405,69 @@ export default function DisplayPage() {
               )}
             </div>
 
-            {/* Newsbox on vote tab */}
+            {/* Right: live votes or newsbox */}
             <div>
-              <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:8 }}>NEWSBOX</div>
-              <div style={{ background:'var(--bg-card)', border:'1px solid var(--border)', padding:12, maxHeight:500, overflowY:'auto' }}>
-                {game.newsItems.length === 0
-                  ? <div style={{ fontSize:12, color:'var(--text-dim)', padding:'8px 0' }}>No posts yet.</div>
-                  : game.newsItems.map(item => (
-                    <div key={item.id} style={{ paddingBottom:10, borderBottom:'1px solid var(--border)', marginBottom:10 }}>
-                      <div style={{ fontSize:10, letterSpacing:'0.1em', color:'var(--text-dim)', marginBottom:4 }}>ADMIN · {timeAgo(item.createdAt)}</div>
-                      <div style={{ fontSize:12, lineHeight:1.7 }} dangerouslySetInnerHTML={{ __html: item.html }} />
+              {(game.voting.liveVotesVisible || game.voting.resultsRevealed) ? (
+                <>
+                  <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:8 }}>
+                    {game.voting.resultsRevealed ? 'FINAL VOTE BREAKDOWN' : 'LIVE VOTES'}
+                  </div>
+                  {/* Running totals */}
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:10 }}>
+                    <div style={{ background:'#1e1408', border:'1px solid #3a1800', padding:10, textAlign:'center' }}>
+                      <div style={{ fontSize:28, fontWeight:700, color:'#e8a020' }}>{effectiveVotesA}</div>
+                      <div style={{ fontSize:10, color:'#e8a020', letterSpacing:'.1em' }}>{optA}{autoAcceptCount > 0 ? ` (+${autoAcceptCount})` : ''}</div>
                     </div>
-                  ))}
-              </div>
+                    <div style={{ background:'#0e0d20', border:'1px solid #1a1840', padding:10, textAlign:'center' }}>
+                      <div style={{ fontSize:28, fontWeight:700, color:'#7F77DD' }}>{effectiveVotesB}</div>
+                      <div style={{ fontSize:10, color:'#7F77DD', letterSpacing:'.1em' }}>{optB}</div>
+                    </div>
+                  </div>
+                  {/* Progress bar */}
+                  <div style={{ height:4, background:'var(--border)', marginBottom:8 }}>
+                    <div style={{ height:'100%', background:'#e8a020', width:`${effectiveTotal > 0 ? (effectiveVotesA/effectiveTotal)*100 : 50}%`, transition:'width 0.5s' }} />
+                  </div>
+                  <div style={{ fontSize:10, color:'var(--text-dim)', marginBottom:10 }}>
+                    {game.voting.totalVoted ?? 0} voted · {eligibleStudents.length - (game.voting.totalVoted ?? 0)} remaining
+                  </div>
+                  {/* Individual votes */}
+                  <div style={{ background:'var(--bg-card)', border:'1px solid var(--border)', padding:10, maxHeight:380, overflowY:'auto' }}>
+                    {eligibleStudents.map(s => (
+                      <div key={s.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'4px 0', borderBottom:'1px solid var(--border)' }}>
+                        <span style={{ fontSize:11, color:'var(--text)' }}>{s.name.split(',')[0]}</span>
+                        {s.voteChoice ? (
+                          <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', border:'1px solid',
+                            borderColor: s.voteChoice==='a'?'#3a1800':'#1a1840',
+                            color: s.voteChoice==='a'?'#e8a020':'#7F77DD',
+                            background: s.voteChoice==='a'?'#1e1408':'#0e0d20' }}>
+                            {s.voteChoice==='a' ? optA[0] : optB[0]}
+                          </span>
+                        ) : deadlinePassed && game.voting.open ? (
+                          <span style={{ fontSize:10, color:'rgba(232,160,32,0.4)', padding:'2px 7px', border:'1px solid #3a1800', background:'#1e1408' }}>
+                            {optA[0]} auto
+                          </span>
+                        ) : (
+                          <span style={{ fontSize:10, color:'var(--text-dim)' }}>—</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:8 }}>NEWSBOX</div>
+                  <div style={{ background:'var(--bg-card)', border:'1px solid var(--border)', padding:12, maxHeight:500, overflowY:'auto' }}>
+                    {game.newsItems.length === 0
+                      ? <div style={{ fontSize:12, color:'var(--text-dim)', padding:'8px 0' }}>No posts yet.</div>
+                      : game.newsItems.map(item => (
+                        <div key={item.id} style={{ paddingBottom:10, borderBottom:'1px solid var(--border)', marginBottom:10 }}>
+                          <div style={{ fontSize:10, letterSpacing:'.1em', color:'var(--text-dim)', marginBottom:4 }}>ADMIN · {timeAgo(item.createdAt)}</div>
+                          <div style={{ fontSize:12, lineHeight:1.7 }} dangerouslySetInnerHTML={{ __html: item.html }} />
+                        </div>
+                      ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -361,7 +480,7 @@ export default function DisplayPage() {
               ? <div style={{ fontSize:13, color:'var(--text-dim)' }}>No posts yet.</div>
               : game.newsItems.map(item => (
                 <div key={item.id} style={{ background:'var(--bg-card)', border:'1px solid var(--border)', padding:14, marginBottom:10 }}>
-                  <div style={{ fontSize:10, letterSpacing:'0.1em', color:'var(--text-dim)', marginBottom:6 }}>ADMIN · {timeAgo(item.createdAt)}</div>
+                  <div style={{ fontSize:10, letterSpacing:'.1em', color:'var(--text-dim)', marginBottom:6 }}>ADMIN · {timeAgo(item.createdAt)}</div>
                   <div style={{ fontSize:13, lineHeight:1.8 }} dangerouslySetInnerHTML={{ __html: item.html }} />
                 </div>
               ))}
@@ -409,7 +528,6 @@ function ChartsPanel({ game }: { game: GameInfo }) {
   const topGainers = roundGains.slice(0,5)
   const topLosers = [...roundGains].sort((a,b)=>a.delta-b.delta).slice(0,5)
   const maxDelta = Math.max(...roundGains.map(g=>Math.abs(g.delta)), 1)
-
   return (
     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
       <div style={{ gridColumn:'1/-1', display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
