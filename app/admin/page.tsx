@@ -8,6 +8,8 @@ interface Student {
   hasChosen: boolean; choice?: string; isEliminated: boolean
   staplePartnerId?: string; isHawkInStaple?: boolean; stapleTransferAmount?: number
   voteChoice?: string
+  voteEligible?: boolean
+  coupPct?: number
   roundHistory?: { round: number; type: string; pair: string; result: string }[]
 }
 interface Pairing {
@@ -92,7 +94,6 @@ export default function AdminPage() {
   // Newsbox state
   const [newsEditor, setNewsEditor] = useState('')
   const [newsEditorRef, setNewsEditorRef] = useState<HTMLDivElement|null>(null)
-  const [coupThresholdInput, setCoupThresholdInput] = useState('10')
   const [coupPctEditId, setCoupPctEditId] = useState<string|null>(null)
   const [coupPctVal, setCoupPctVal] = useState('')
 
@@ -444,6 +445,8 @@ export default function AdminPage() {
                     </th>
                     <th style={{ padding:'5px 8px', color:'var(--text-dim)', fontWeight:400, fontSize:10 }}></th>
                     <th style={{ padding:'5px 8px', color:'var(--text-dim)', fontWeight:400, fontSize:10 }}>+/−</th>
+                    <th style={{ padding:'5px 8px', color:'var(--text-dim)', fontWeight:400, fontSize:10 }}>% Coup</th>
+                    <th style={{ padding:'5px 8px', color:'var(--text-dim)', fontWeight:400, fontSize:10 }}>Vote</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -520,6 +523,34 @@ export default function AdminPage() {
                               ±
                             </button>
                           )}
+                        </td>
+                        <td style={{ padding:'4px 6px' }} onClick={e => e.stopPropagation()}>
+                          {coupPctEditId === s.id ? (
+                            <div style={{ display:'flex', gap:3, alignItems:'center' }}>
+                              <input type="number" className="input" style={{ width:55, padding:'2px 5px', fontSize:11 }}
+                                placeholder="%" value={coupPctVal} onChange={e => setCoupPctVal(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') { act('set_coup_pct', { id: s.id, pct: coupPctVal === '' ? null : parseFloat(coupPctVal) }); setCoupPctEditId(null); setCoupPctVal('') }
+                                  if (e.key === 'Escape') { setCoupPctEditId(null); setCoupPctVal('') }
+                                }} autoFocus />
+                              <button className="btn btn-gold" style={{ padding:'2px 6px', fontSize:10 }}
+                                onClick={() => { act('set_coup_pct', { id: s.id, pct: coupPctVal === '' ? null : parseFloat(coupPctVal) }); setCoupPctEditId(null); setCoupPctVal('') }}>✓</button>
+                              <button className="btn btn-ghost" style={{ padding:'2px 6px', fontSize:10 }}
+                                onClick={() => { setCoupPctEditId(null); setCoupPctVal('') }}>✕</button>
+                            </div>
+                          ) : (
+                            <button onClick={() => { setCoupPctEditId(s.id); setCoupPctVal(s.coupPct != null ? String(s.coupPct) : '') }}
+                              style={{ background:'transparent', border:'1px solid var(--border)', cursor:'pointer', fontSize:11,
+                                color: s.coupPct != null ? 'var(--gold)' : 'var(--text-dim)', padding:'2px 7px', fontFamily:'inherit', minWidth:36 }}>
+                              {s.coupPct != null ? `${s.coupPct}%` : '—'}
+                            </button>
+                          )}
+                        </td>
+                        <td style={{ padding:'5px 8px', textAlign:'center' }} onClick={e => e.stopPropagation()}>
+                          <button onClick={() => act('toggle_vote_eligible', { id: s.id })}
+                            style={{ background:'transparent', border:'none', cursor:'pointer', fontSize:12, padding:'0 2px' }}>
+                            {s.voteEligible === false ? <span style={{ color:'var(--hawk)', fontSize:10 }}>✕</span> : <span style={{ color:'var(--green)', fontSize:10 }}>✓</span>}
+                          </button>
                         </td>
                       </tr>
                     )
