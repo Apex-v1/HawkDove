@@ -22,8 +22,7 @@ interface GameInfo {
   gameTitle?: string
   votingTabOpen: boolean; newsboxTabOpen: boolean
   newsItems: NewsItem[]
-  voting: { open: boolean; optionA: string; optionB: string; deadline: string; resultsRevealed: boolean; presidentId?: string; presidentTitle?: string }
-  students: StudentInfo[]
+  voting: { open: boolean; optionA: string; optionB: string; deadline: string; resultsRevealed: boolean; presidentId?: string; presidentTitle?: string; liveVotesVisible?: boolean; coupTriggered?: boolean; coupThreshold?: number; liveVotes?: {name:string;choice:string}[]; votesA?: number; votesB?: number; totalVoted?: number; eligibleTotal?: number }  students: StudentInfo[]
   lastRound: RoundRecord | null
   rounds?: RoundRecord[]
 }
