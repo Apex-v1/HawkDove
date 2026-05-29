@@ -5,6 +5,7 @@ interface StudentInfo {
   id: string; name: string; email: string; points: number
   hasChosen: boolean; choice?: string; isEliminated: boolean
   staplePartnerId?: string; isHawkInStaple?: boolean; tiebreaker?: number
+  voteEligible?: boolean
 }
 interface Pairing {
   pairingId: string; type: string; aId: string; bId: string
@@ -20,7 +21,7 @@ interface GameInfo {
   gameTitle?: string
   votingTabOpen: boolean; newsboxTabOpen: boolean
   newsItems: NewsItem[]
-  voting: { open: boolean; optionA: string; optionB: string; deadline: string; resultsRevealed: boolean; presidentId?: string; presidentTitle?: string; liveVotesVisible?: boolean; coupTriggered?: boolean; coupThreshold?: number; liveVotes?: {name:string;choice:string}[]; votesA?: number; votesB?: number; totalVoted?: number }
+  voting: { open: boolean; optionA: string; optionB: string; deadline: string; resultsRevealed: boolean; presidentId?: string; presidentTitle?: string }
   students: StudentInfo[]
   lastRound: RoundRecord | null
   rounds?: RoundRecord[]
@@ -84,6 +85,13 @@ export default function DisplayPage() {
 
   // Timer countdown
   const deadlineSecs = game.voting.deadline ? Math.max(0, Math.floor((new Date(game.voting.deadline).getTime() - Date.now()) / 1000)) : 0
+  // Auto-accept: when deadline passes, non-voters count as Accept
+  const deadlinePassed = game.voting.deadline ? new Date(game.voting.deadline).getTime() < Date.now() : false
+  const autoAcceptVotesA = deadlinePassed && game.voting.open
+    ? game.students.filter(s => s.voteEligible !== false && !s.isEliminated && !s.voteChoice).length
+    : 0
+  const effectiveVotesA = (game.voting.votesA ?? 0) + autoAcceptVotesA
+  const effectiveVotesB = game.voting.votesB ?? 0
   const timerD = String(Math.floor(deadlineSecs / 86400)).padStart(2,'0')
   const timerH = String(Math.floor((deadlineSecs % 86400) / 3600)).padStart(2,'0')
   const timerM = String(Math.floor((deadlineSecs % 3600) / 60)).padStart(2,'0')
@@ -109,6 +117,21 @@ export default function DisplayPage() {
 
   return (
     <div style={{ minHeight:'100vh', display:'flex', flexDirection:'column', background:'var(--bg)', fontFamily:'DM Mono, Courier New, monospace' }}>
+      {/* ── RED SCREEN: COUP TRIGGERED ── */}
+      {game.voting.coupTriggered && (
+        <div style={{ position:'fixed', inset:0, zIndex:9999, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', animation:'redPulse 2s ease infinite' }}>
+          <style>{`@keyframes redPulse { 0%,100%{background:#1a0000} 50%{background:#2d0000} }`}</style>
+          <div style={{ fontSize:11, letterSpacing:'.4em', color:'#ff2020', textTransform:'uppercase', marginBottom:20, opacity:.7 }}>Coalition Status</div>
+          <div style={{ fontSize:80, fontWeight:700, color:'#ff2020', lineHeight:1, textShadow:'0 0 40px #ff202080', marginBottom:16 }}>COUP</div>
+          <div style={{ fontSize:18, color:'#ff6060', letterSpacing:'.15em', marginBottom:8 }}>THRESHOLD REACHED</div>
+          <div style={{ fontSize:13, color:'rgba(255,80,80,0.6)', letterSpacing:'.1em', marginTop:8 }}>
+            {effectiveVotesB} of {game.voting.coupThreshold ?? 10}+ votes for {game.voting.optionB}
+          </div>
+          <div style={{ marginTop:40, fontSize:10, color:'rgba(255,80,80,0.4)', letterSpacing:'.2em', textTransform:'uppercase' }}>
+            Admin can dismiss this screen
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 24px', borderBottom:'1px solid var(--border)', background:'var(--bg-card)', flexShrink:0 }}>
         <div style={{ fontSize:20, fontWeight:500 }}>
@@ -292,6 +315,11 @@ export default function DisplayPage() {
                 <div style={{ padding:'16px 20px', background:'var(--green-bg)', border:'1px solid var(--green)', fontSize:13, color:'var(--green)', letterSpacing:'0.05em' }}>
                   ✓ Vote recorded. You cannot vote again.
                 </div>
+              ) : deadlinePassed && game.voting.open ? (
+                <div style={{ padding:'16px 20px', background:'var(--bg-card)', border:'1px solid var(--border)', fontSize:13, color:'var(--text-dim)' }}>
+                  <div style={{ color:'var(--gold)', marginBottom:6, fontWeight:500 }}>Deadline passed.</div>
+                  Players who did not vote have been counted as {game.voting.optionA}.
+                </div>
               ) : !game.voting.open ? (
                 <div style={{ padding:'16px 20px', background:'var(--bg-card)', border:'1px solid var(--border)', fontSize:13, color:'var(--text-dim)' }}>
                   Voting is currently closed.
@@ -336,19 +364,51 @@ export default function DisplayPage() {
               )}
             </div>
 
-            {/* Newsbox on vote tab */}
+            {/* Live votes or newsbox on right side of vote tab */}
             <div>
-              <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:8 }}>NEWSBOX</div>
-              <div style={{ background:'var(--bg-card)', border:'1px solid var(--border)', padding:12, maxHeight:500, overflowY:'auto' }}>
-                {game.newsItems.length === 0
-                  ? <div style={{ fontSize:12, color:'var(--text-dim)', padding:'8px 0' }}>No posts yet.</div>
-                  : game.newsItems.map(item => (
-                    <div key={item.id} style={{ paddingBottom:10, borderBottom:'1px solid var(--border)', marginBottom:10 }}>
-                      <div style={{ fontSize:10, letterSpacing:'0.1em', color:'var(--text-dim)', marginBottom:4 }}>ADMIN · {timeAgo(item.createdAt)}</div>
-                      <div style={{ fontSize:12, lineHeight:1.7 }} dangerouslySetInnerHTML={{ __html: item.html }} />
+              {game.voting.liveVotesVisible ? (
+                <>
+                  <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:8 }}>LIVE VOTES</div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:10 }}>
+                    <div style={{ background:'#1e1408', border:'1px solid #3a1800', padding:12, textAlign:'center' }}>
+                      <div style={{ fontSize:26, fontWeight:500, color:'#e8a020' }}>{effectiveVotesA}</div>
+                      <div style={{ fontSize:10, color:'#e8a020', marginTop:2, letterSpacing:'.1em' }}>{game.voting.optionA}{autoAcceptVotesA > 0 ? ` (+${autoAcceptVotesA} auto)` : ''}</div>
                     </div>
-                  ))}
-              </div>
+                    <div style={{ background:'#0e0d20', border:'1px solid #1a1840', padding:12, textAlign:'center' }}>
+                      <div style={{ fontSize:26, fontWeight:500, color:'#7F77DD' }}>{effectiveVotesB}</div>
+                      <div style={{ fontSize:10, color:'#7F77DD', marginTop:2, letterSpacing:'.1em' }}>{game.voting.optionB}</div>
+                    </div>
+                  </div>
+                  <div style={{ background:'var(--bg-card)', border:'1px solid var(--border)', padding:12, maxHeight:380, overflowY:'auto' }}>
+                    <div style={{ fontSize:10, letterSpacing:'.1em', color:'var(--text-dim)', marginBottom:8 }}>
+                      {game.voting.totalVoted ?? 0} voted · {game.students.filter(s => s.voteEligible !== false && !s.isEliminated).length - (game.voting.totalVoted ?? 0)} remaining
+                    </div>
+                    {(game.voting.liveVotes ?? []).map((v, i) => (
+                      <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'5px 0', borderBottom:'1px solid var(--border)' }}>
+                        <span style={{ fontSize:12, color:'var(--text)' }}>{v.name.split(',')[0]}</span>
+                        <span style={{ fontSize:10, fontWeight:700, letterSpacing:'.12em', padding:'2px 7px', border:'1px solid', borderColor:v.choice==='a'?'#3a1800':'#1a1840', color:v.choice==='a'?'#e8a020':'#7F77DD', background:v.choice==='a'?'#1e1408':'#0e0d20' }}>
+                          {v.choice==='a' ? game.voting.optionA[0] : game.voting.optionB[0]}
+                        </span>
+                      </div>
+                    ))}
+                    {(game.voting.liveVotes ?? []).length === 0 && <div style={{ fontSize:12, color:'var(--text-dim)' }}>No votes yet.</div>}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize:10, letterSpacing:'0.2em', color:'var(--text-dim)', marginBottom:8 }}>NEWSBOX</div>
+                  <div style={{ background:'var(--bg-card)', border:'1px solid var(--border)', padding:12, maxHeight:500, overflowY:'auto' }}>
+                    {game.newsItems.length === 0
+                      ? <div style={{ fontSize:12, color:'var(--text-dim)', padding:'8px 0' }}>No posts yet.</div>
+                      : game.newsItems.map(item => (
+                        <div key={item.id} style={{ paddingBottom:10, borderBottom:'1px solid var(--border)', marginBottom:10 }}>
+                          <div style={{ fontSize:10, letterSpacing:'0.1em', color:'var(--text-dim)', marginBottom:4 }}>ADMIN · {timeAgo(item.createdAt)}</div>
+                          <div style={{ fontSize:12, lineHeight:1.7 }} dangerouslySetInnerHTML={{ __html: item.html }} />
+                        </div>
+                      ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
