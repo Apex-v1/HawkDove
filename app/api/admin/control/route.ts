@@ -181,6 +181,19 @@ export async function POST(req: NextRequest) {
         await kvSave(s)
         return NextResponse.json({ ok:true, state: await getState() })
       }
+        case 'set_coup_pct': {
+  const s = await getState()
+  const st = s.students.find(x => x.id === payload.id)
+  if (st) {
+    if (payload.pct === null || payload.pct === undefined) {
+      st.coupPct = undefined
+    } else {
+      st.coupPct = payload.pct as number
+    }
+    await kvSave(s)
+  }
+  return NextResponse.json({ ok:true, state: await getState() })
+}
       case 'reset': { await resetState(); return NextResponse.json({ ok:true }) }
       default: return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
     }
