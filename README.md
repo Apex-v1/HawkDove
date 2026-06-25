@@ -1,19 +1,18 @@
 # 🦅🕊️ Jesse Driscoll's HAWK / DOVE
 
-A real-time game theory experiment for the classroom.
+A real-time game theory simulation for the classroom — built for UCSD.
 
 Created and edited by Jesús E. Rojas Venzor based on notes from Jesse Driscoll.
 
 ---
 
-## Four Interfaces
+## Three Interfaces
 
 | URL | Who uses it | What it does |
 |---|---|---|
-| `/player` | Students (phones/laptops) | Select their name, submit Hawk or Dove, see round results |
+| `/player` | Students (phones/laptops) | Submit Hawk or Dove, see round results |
 | `/display` | Projector / shared screen | Live leaderboard, charts, pairings, voting, newsbox |
-| `/admin` | Instructor only (password) | Control rounds, manage roster, voting, newsbox, export data |
-| `/register` | Students (optional) | Self-register name, email, number, and letter before the game |
+| `/admin` | Instructor only (password) | Control all game functions |
 
 ---
 
@@ -26,46 +25,31 @@ git add .
 git commit -m "initial"
 gh repo create hawk-dove --public --push
 ```
-Or manually create a repo on github.com and follow the push instructions.
 
-### 2. Set Up Upstash Redis (required for data persistence)
+### 2. Set Up Upstash Redis
 
-Without this step, all game data resets every ~1 minute when Vercel's serverless functions go idle.
+Without this, all data resets every ~1 minute when Vercel's serverless functions go idle.
 
 1. Go to [upstash.com](https://upstash.com) → create a free account
-2. Click **Create Database** → give it a name (e.g. `HawkDove`) → choose a region → click **Create**
-3. On your database page, click the **REST** tab
-4. Copy the two values shown:
-   - `UPSTASH_REDIS_REST_URL`
-   - `UPSTASH_REDIS_REST_TOKEN`
-5. You'll add these to Vercel in the next step
+2. Click **Create Database** → name it → choose a region → **Create**
+3. On the database page, click the **REST** tab
+4. Copy `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`
 
 ### 3. Deploy on Vercel
 
-1. Go to [vercel.com](https://vercel.com) → **Add New Project**
-2. Import your GitHub repo
-3. Under **Environment Variables**, add all three:
+1. Go to [vercel.com](https://vercel.com) → **Add New Project** → import your GitHub repo
+2. Under **Environment Variables**, add:
    ```
    ADMIN_PASSWORD           = (your secret password)
    UPSTASH_REDIS_REST_URL   = (from Upstash REST tab)
    UPSTASH_REDIS_REST_TOKEN = (from Upstash REST tab)
    ```
-   Make sure all three environments are checked: Production, Preview, Development.
-4. Click **Deploy**
+3. Click **Deploy**
 
-### 4. Verify persistence is working
-
-After deploying, visit `https://your-app.vercel.app/api/debug` in your browser. You should see:
-```json
-{ "success": true, "ping": "ok" }
-```
-If you see an error, double-check your Upstash env vars in Vercel → Settings → Environment Variables.
-
-### 5. Share the URLs
+### 4. Share the URLs
 - Students: `https://your-app.vercel.app/player`
 - Admin panel: `https://your-app.vercel.app/admin`
 - Projector: `https://your-app.vercel.app/display`
-- Registration (optional): `https://your-app.vercel.app/register`
 
 ---
 
@@ -73,39 +57,56 @@ If you see an error, double-check your Upstash env vars in Vercel → Settings �
 
 Log in at `/admin` using your `ADMIN_PASSWORD`.
 
+---
+
 ### Roster Tab
 
 **Uploading students:**
-- Prepare a `.xlsx` spreadsheet with these columns: `Name`, `Email`, `Tiebreaker`, `Points`
-- Optional columns: `Round Type`, `Round Result`, `Round Pair`, `Letter`
+- Prepare a `.xlsx` spreadsheet with columns: `Name`, `Email`, `Tiebreaker`, `Points`
 - Drag and drop the file onto the upload area, or click to browse
-- Students are loaded instantly — they can now find their name at `/player`
-- Re-uploading replaces the entire roster, so always upload the latest points
+- Students are loaded instantly
+- Re-uploading replaces the entire roster
 
 **Adding students manually:**
-- Click **+ Add Student** above the roster table
-- Enter name (Last, First format), email, tiebreaker, and starting points
-- Click **Add →** to insert them immediately
+- Click **+ Add** in the Add Student card
+- Enter name, email, points, and tiebreaker
+- Click **Add Student →**
+
+**Deleting students:**
+- Click **del** next to any student row
+- Confirms before deleting
+- Does not affect other students' votes or points
 
 **Editing students inline:**
-- Click any student row to edit name, email, points, tiebreaker, Hawk/Dove choice, or notes
-- The **±** button lets you quickly add or subtract points — type a positive or negative number and press Enter
-- Click the 💀 / — button in the Elim column to toggle elimination directly
-- Click the **Note** column to add a private instructor note on any student
-- Eliminated students are grayed out and excluded from pairings
+- Click any row to edit name, email, points, tiebreaker, or Hawk/Dove choice
+- The **±** button lets you quickly add or subtract points — type a number and press Enter
+- Click 💀 / — in the Elim column to toggle elimination
 
-**Column sorting:**
-- Click any column header to sort ascending or descending (↑ / ↓)
+**% Coup column:**
+- Shows the manual probability percentage from the Point Transfer Proposal PDF
+- Click the button in the cell to enter edit mode, type the percentage, press Enter or ✓ to save
+- Leave blank to show —
+- For internal reference only — not shown to students
+
+**Vote eligibility (Vote column):**
+- ✓ green = student can vote (default)
+- ✕ red = student is blocked from voting
+- Click to toggle
+- Ineligible students cannot submit a vote and are excluded from the eligible pool
+
+**Sorting:**
+- Click any column header to sort ascending/descending
 
 **Protectorate / Staple pairs (Week 2):**
-- Use the dropdowns to select Player A and Player B, then choose which one is the Hawk
+- Use the dropdowns to select Player A, Player B, and which is the Hawk
 - Click 📌 Create Protectorate to staple them
-- Each stapled pair shows a "Hawk returns" input — enter fixed points or a percentage of what the Hawk took
+- Set how many points Hawk returns — enter fixed pts or a % of what Hawk took
 - Click ✕ to remove a protectorate
 
 **Exporting:**
 - Click **⬇ Export CSV** in the header to download current standings
-- Includes: Rank, Name, Email, Points, Tiebreaker, Letter, Choice, Vote, Stapled, Eliminated
+
+---
 
 ### Round Controls
 
@@ -114,79 +115,80 @@ Log in at `/admin` using your `ADMIN_PASSWORD`.
 | ▶ Open Round | When no round is active | Lets students submit their choice |
 | Close | While round is open | Closes submissions without computing |
 | ⚡ Compute | While round is open | Calculates all pairings and deltas |
-| 🔀 Re-randomize | After computing, before finalizing | Reshuffles all pairings with a new random seed |
-| ✕ Cancel Round | After computing, before finalizing | Discards pending round, clears submissions |
-| ✓ Finalize & Push | After computing | Applies results to all student balances permanently |
+| 🔀 Re-randomize | After computing, before finalizing | Reshuffles all pairings with a new seed |
+| ✕ Cancel Round | After computing, before finalizing | Discards pending round |
+| ✓ Finalize & Push | After computing | Applies results to all student balances |
 
 **Display Round override:**
-- Type a number in "Display Round" and click Set to show a different round number on `/display` and `/player`
+- Type a number and click Set to control which round number shows on `/display`
+
+---
 
 ### Round Review Tab
 
-After clicking Compute, you are taken to the Review tab:
-- Every pairing shown with both players, choices, starting points, delta, and projected new balance
-- Click **Edit** on any row to manually adjust the delta
+After clicking Compute:
+- All pairings shown with players, choices, starting points, delta, and projected balance
+- Click **Edit** on any row to manually adjust the delta before finalizing
 - Click **🔀 Re-randomize** to reshuffle all pairings from scratch
-- Click **✕ Cancel Round** to discard the pending round — the display page returns to showing the last finalized round's charts and factoids
+- Click **✕ Cancel Round** to discard
 - Click **✓ Finalize & Push Results** to apply all changes permanently
+
+---
 
 ### History Tab
 
-- Every finalized round recorded as a scrollable table
-- Read-only log — to correct past points, edit the student's current balance in the Roster tab
+Read-only log of every finalized round. To correct past points, edit the student's current balance in the Roster tab.
+
+---
 
 ### Insights Tab
 
-- Key stats, Hawk vs Dove split, points bar chart for all players
-- Four auto-generated insight quotes based on live data
+Key stats, Hawk vs Dove split, points bar chart, and four auto-generated insight quotes based on live data.
+
+---
 
 ### Voting Tab
 
-Used to run a president/candidate vote among students.
+Used to run a coalition vote (e.g. Accept/Coup) among students.
 
 **Setup:**
-- **Game Title** — replaces "HAWK / DOVE" in headers on `/display` and `/player` (e.g. "Support / Fight"). Format: `OptionA / OptionB`. Leave blank to keep the default.
-- **Candidate** — select a student from the roster; their name and points appear as a banner on the Vote tab
-- **Candidate Title** — optional label shown under their name (e.g. "The Hawk", "Incumbent")
-- **Option A / Option B** — the two vote choices (default: Support / Fight)
-- **Voting Deadline** — countdown timer shown to students (format: YYYY-MM-DD HH:MM)
+- **Game Title** — replaces "HAWK / DOVE" in all headers (format: `OptionA / OptionB`, e.g. `Accept / Coup`)
+- **Candidate** — select a student; their name and points appear as a banner on the Vote tab
+- **Candidate Title** — optional label shown under their name
+- **Option A / Option B** — the two vote labels (e.g. Accept / Coup)
+- **Voting Deadline** — format: `YYYY-MM-DD HH:MM` (24-hour). When the deadline passes, all students who have not voted are automatically counted as Option A (Accept)
 
 **Controls:**
 - **▶ Show Vote Tab** — makes the Vote tab visible on `/display`
 - **▶ Open Voting** — allows students to submit votes
-- **Reveal Results** — makes results visible to students (until then only you can see them)
+- **Reveal Results / Hide Results** — toggles result visibility on `/display`. Until revealed, only you can see counts
 - **Clear Votes** — resets all votes
+- **▶ Show Live Votes** — when enabled, the right panel of the Vote tab on `/display` switches from Newsbox to a real-time per-student vote feed
+- **Red Screen Threshold** — set the number of Option B (Coup) votes that triggers a full-screen red alert on `/display`. Default: 10. The red screen persists until you click **Dismiss**
 
-**Results panel** shows live vote counts and percentage split, visible only to you until revealed.
+**Results panel** in the right column shows live vote counts and percentage split, visible only to you until revealed.
 
-**Vote column in roster** shows S or F (orange/purple) tag for each student once they vote.
+**Auto-accept at deadline:**
+- When the deadline passes, students who have not voted are automatically counted as Option A
+- They appear in the vote breakdown as "auto"
+- No action required from you — this is display-side logic only
+
+**Red Screen:**
+- Triggers automatically on `/display` when the coup threshold is reached
+- Full-screen pulsing red overlay with "COUP — THRESHOLD REACHED"
+- Dismiss from Admin → Voting tab → **Dismiss** button
+
+---
 
 ### Newsbox Tab
 
 Post formatted messages to students that appear on `/display`.
 
 - Use the **B / I / U / H** toolbar to bold, italicize, underline, or highlight text
-- Live preview shows how the post will look before publishing
+- Live preview shows how the post will look
 - Click **Post →** to publish instantly
 - Click **▶ Show Newsbox Tab** to make the Newsbox tab visible on `/display`
 - Click **✕** next to any post to delete it
-
----
-
-## Registration (optional pre-game)
-
-Students can self-register at `/register` before the game begins.
-
-**Admin setup (Roster tab → Registration Settings):**
-- Toggle registration open/closed
-- Set tiebreaker min/max range
-- Define letter options (comma-separated, e.g. `R,K` or `A,B,C`)
-- Toggle whether letters are visible on the display page
-- Share the link: `/register`
-
-**Student registration form collects:** first name, last name, email, tiebreaker number, and letter.
-
-Duplicate emails are blocked. To let a student re-register, delete them from the roster first (🗑 button).
 
 ---
 
@@ -196,51 +198,22 @@ At `/player`:
 - Their own name, email, and current point balance
 - Their choice for the current round (after submitting)
 - Their result from the last round
-- Active Protectorates (stapled pairs) — names and emails only
+- Active protectorates (names only)
 - Payoff rules for the current week
-- Game title (if set)
 
 Students **cannot** see:
 - Anyone else's point balance
-- Tiebreaker numbers
+- Tiebreaker numbers or % Coup values
 - Admin controls or round history
 - Vote results until instructor reveals them
 - Who chose Hawk or Dove before results are pushed
 
-At `/display` (Vote tab):
+At `/display` (Vote tab, when open):
 - Candidate banner (name, title, current points)
 - Email-based vote input — one vote per registered email
 - Countdown timer to deadline
-- Newsbox feed on the right
-
----
-
-## Ending the Game
-
-To eliminate a player, click 💀 / — in the Elim column. To reverse, click again.
-
-The game ends when you decide. Clicking **Reset** in the admin header wipes all data including votes, newsbox posts, and the roster.
-
----
-
-## What Is Editable
-
-| What | Where | How |
-|---|---|---|
-| Student name / email | Roster tab | Click row → edit → Save |
-| Student points | Roster tab | Click row → edit → Save, or use ± button |
-| Tiebreaker | Roster tab | Click row → edit → Save |
-| Hawk/Dove choice | Roster tab | Click row → Choice dropdown → Save |
-| Student note | Roster tab | Click Note cell → edit → Save |
-| Eliminated status | Roster tab | Click 💀/— directly |
-| Round deltas | Round Review tab | Click Edit on any pairing row |
-| Staple transfer amount | Roster tab → Protectorates | Enter pts or % in "Hawk returns" field |
-| Display round number | Round controls bar | Type number → Set |
-| Week (1 or 2) | Round controls bar | Click W1 or W2 |
-| Game title | Admin → Voting tab | Type title → Set |
-| Vote options / deadline / candidate | Admin → Voting tab | Edit fields → Save Voting Settings |
-| Newsbox messages | Admin → Newsbox tab | Post / delete |
-| Admin password | Vercel Environment Variables | Update `ADMIN_PASSWORD` → Redeploy |
+- Live vote feed (if enabled by admin) or Newsbox on the right
+- Final results (if revealed by admin)
 
 ---
 
@@ -250,15 +223,14 @@ The game ends when you decide. Clicking **Reset** in the admin header wipes all 
 
 | Matchup | Outcome |
 |---|---|
-| D vs D | Each player gains a separate random +1–20 pts (independent dice rolls) |
-| H vs D | Hawk takes 25% of Dove's points × 3; Dove keeps 75% |
+| D vs D | Each player gains an independent random +1–20 pts (separate dice rolls) |
+| H vs D | Hawk takes 25% of Dove's points × 3; Dove loses 25% |
 | H vs H | Higher tiebreaker takes 100% of loser's points; coin flip if tied |
 
 **Week 2 additions:**
-- Players who were the Dove in an H+D pairing can choose to **staple** to that Hawk
-- Stapled pairs are removed from the random pool each round
+- Players stapled into Protectorates are removed from the random pool
 - Every round: Dove automatically pays 25% tax (×3 to Hawk)
-- Hawk can voluntarily return any amount — set as fixed points or a percentage of what was taken
+- Hawk can voluntarily return a fixed amount or percentage
 - Points can go negative
 
 ---
@@ -267,10 +239,9 @@ The game ends when you decide. Clicking **Reset** in the admin header wipes all 
 
 - **Next.js 14** (App Router) deployed on Vercel
 - **Upstash Redis** for persistent state across cold starts and redeploys
-- Client routes: `/player`, `/admin`, `/display`, `/register`
-- State managed in `lib/store.ts` — all reads/writes go through Redis
+- All game state managed in `lib/store.ts`
 - Admin authentication via HTTP-only cookie set at `/api/admin/auth`
-- Student identity on `/player` remembered by browser cookie (1 year expiry)
+- Student identity on `/player` remembered by browser cookie
 - Votes stored server-side by email — one vote per registered email address
 
 ---
@@ -285,3 +256,27 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000)
+
+---
+
+## Quick Reference — What Is Editable
+
+| What | Where | How |
+|---|---|---|
+| Student name / email | Roster tab | Click row → edit → Save |
+| Student points | Roster tab | Click row or use ± button |
+| Tiebreaker | Roster tab | Click row → edit → Save |
+| Hawk/Dove choice | Roster tab | Click row → Choice dropdown → Save |
+| Eliminated status | Roster tab | Click 💀/— directly |
+| % Coup (manual) | Roster tab | Click cell → type % → Enter |
+| Vote eligibility | Roster tab | Click ✓/✕ in Vote column |
+| Round deltas | Round Review tab | Click Edit on any pairing row |
+| Staple transfer amount | Roster tab → Protectorates | Enter pts or % |
+| Display round number | Round controls bar | Type number → Set |
+| Week (1 or 2) | Round controls bar | Click W1 or W2 |
+| Game title | Admin → Voting tab | Type title → Set |
+| Vote options / deadline / candidate | Admin → Voting tab | Edit fields → Save |
+| Coup threshold | Admin → Voting tab | Enter number → Set |
+| Live votes visibility | Admin → Voting tab | Toggle button |
+| Newsbox messages | Admin → Newsbox tab | Post / delete |
+| Admin password | Vercel → Environment Variables | Update `ADMIN_PASSWORD` → Redeploy |
